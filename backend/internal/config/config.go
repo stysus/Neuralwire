@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all runtime configuration for the backend.
@@ -34,6 +35,11 @@ type Config struct {
 	AdminPassword string
 	// AdminTokenSecret signs admin bearer tokens. Change it outside dev.
 	AdminTokenSecret string
+	// ScrapeMaxPerSource caps how many newest articles per source get
+	// full-content scraping in one fetch cycle.
+	ScrapeMaxPerSource int
+	// ScrapeTimeout bounds each full-content scrape attempt.
+	ScrapeTimeout time.Duration
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -54,19 +60,30 @@ func Load() (Config, error) {
 		getenv("AI_SUMMARY_MODEL", ""),
 	)
 
+	scrapeMax, err := getenvInt("SCRAPE_MAX_PER_SOURCE", 20)
+	if err != nil {
+		return Config{}, err
+	}
+	scrapeTimeoutSec, err := getenvInt("SCRAPE_TIMEOUT_SECONDS", 15)
+	if err != nil {
+		return Config{}, err
+	}
+
 	return Config{
-		Port:              getenv("PORT", "8080"),
-		DatabasePath:      getenv("DB_PATH", "data/neuralwire.db"),
-		CORSAllowOrigins:  getenvList("CORS_ALLOW_ORIGIN", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),
-		AISummaryAPIKey:   os.Getenv("AI_SUMMARY_API_KEY"),
-		AISummaryModel:    model,
-		AISummaryBaseURL:  baseURL,
-		AISummaryProvider: getenv("AI_SUMMARY_PROVIDER", ""),
-		CronSchedule:      getenv("CRON_SCHEDULE", "0 */6 * * *"),
-		FetchOnStartup:    fetchOnStartup,
-		AdminUsername:     getenv("ADMIN_USERNAME", "admin"),
-		AdminPassword:     getenv("ADMIN_PASSWORD", "admin123"),
-		AdminTokenSecret:  getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
+		Port:               getenv("PORT", "8080"),
+		DatabasePath:       getenv("DB_PATH", "data/neuralwire.db"),
+		CORSAllowOrigins:   getenvList("CORS_ALLOW_ORIGIN", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),
+		AISummaryAPIKey:    os.Getenv("AI_SUMMARY_API_KEY"),
+		AISummaryModel:     model,
+		AISummaryBaseURL:   baseURL,
+		AISummaryProvider:  getenv("AI_SUMMARY_PROVIDER", ""),
+		CronSchedule:       getenv("CRON_SCHEDULE", "0 */6 * * *"),
+		FetchOnStartup:     fetchOnStartup,
+		AdminUsername:      getenv("ADMIN_USERNAME", "admin"),
+		AdminPassword:      getenv("ADMIN_PASSWORD", "admin123"),
+		AdminTokenSecret:   getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
+		ScrapeMaxPerSource: scrapeMax,
+		ScrapeTimeout:      time.Duration(scrapeTimeoutSec) * time.Second,
 	}, nil
 }
 
@@ -138,6 +155,20 @@ func getenvBool(key string, fallback bool) (bool, error) {
 		return false, err
 	}
 	return b, nil
+}
+
+// getenvInt parses an integer environment variable, returning the fallback
+// when the variable is unset or empty.
+func getenvInt(key string, fallback int) (int, error) {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback, nil
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 // getenvList parses a comma-separated environment variable into a slice,

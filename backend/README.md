@@ -15,6 +15,10 @@ English by default).
   - Reddit r/artificial
 - Cron scheduler (default: every 6 hours) that fetches feeds and inserts
   articles as **drafts** (semi-automatic moderation workflow)
+- Full-content scraper: RSS excerpts are too short, so the fetcher scrapes
+  the newest articles per source for their full readable body (readability
+  extraction + boilerplate stripping), falling back to the RSS excerpt when
+  scraping fails; summaries are generated from the full content
 - AI summaries via any OpenAI-compatible API (`gpt-4o-mini` by default);
   falls back to a plain 300-character excerpt when no API key is set
 - CORS enabled for `http://localhost:5173` and `http://127.0.0.1:5173` (SvelteKit dev server)
@@ -50,12 +54,33 @@ on first run. On boot it runs an initial RSS fetch and then polls every
 | `AI_SUMMARY_BASE_URL`| `https://api.openai.com/v1`   | OpenAI-compatible API base URL                       |
 | `CRON_SCHEDULE`      | `0 */6 * * *`                 | Cron expression for the RSS fetcher                  |
 | `FETCH_ON_STARTUP`   | `true`                        | Run one fetch cycle when the server boots            |
+| `SCRAPE_MAX_PER_SOURCE` | `20`                       | Newest articles scraped per source per cycle         |
+| `SCRAPE_TIMEOUT_SECONDS` | `15`                      | Per-article scrape timeout (seconds)                 |
 | `ADMIN_USERNAME`     | `admin`                       | Admin login username                                 |
 | `ADMIN_PASSWORD`     | `admin123`                    | Admin login password. **Change it outside development** |
 | `ADMIN_TOKEN_SECRET` | dev value (see `.env.example`) | HMAC secret signing admin bearer tokens. **Change it outside development** |
 
 Without `AI_SUMMARY_API_KEY`, articles are summarized by truncating the
 plain-text content to 300 characters.
+
+## How full-content scraping works
+
+RSS feeds only expose short excerpts, so the fetcher runs a hybrid
+extraction for each new article:
+
+1. For the **newest N articles per source per cycle** (`SCRAPE_MAX_PER_SOURCE`,
+   default 20) it fetches the article URL and extracts the full readable body
+   with a readability algorithm (codeberg.org/readeck/go-readability/v2),
+   after stripping navigation, ads, sidebars and interactive widgets.
+2. If scraping succeeds, the scraped body becomes the article `content` (and
+   a better scraped title replaces the RSS title). The AI summarizer then
+   summarizes the **full** scraped content.
+3. If scraping fails, times out (`SCRAPE_TIMEOUT_SECONDS`, default 15s) or
+   the budget is exceeded, the article falls back to the RSS excerpt
+   (`item.Content` / `item.Description`).
+
+The per-source log line reports the split, e.g.
+`fetcher: source "Google AI Blog" inserted 20 new draft(s) (scraped: 18, fallback: 2)`.
 
 ## API
 
@@ -153,6 +178,7 @@ backend/
     ├── models/          # domain types
     ├── repository/      # SQL data access
     ├── scheduler/       # cron scheduling
+    ├── scraper/         # full-content extraction (readability + cleanup)
     └── slug/            # slug helpers
 ```
 

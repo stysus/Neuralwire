@@ -19,6 +19,7 @@ import (
 	"neuralwire/backend/internal/fetcher"
 	"neuralwire/backend/internal/repository"
 	"neuralwire/backend/internal/scheduler"
+	"neuralwire/backend/internal/scraper"
 )
 
 func main() {
@@ -63,6 +64,12 @@ func main() {
 		Sources:    sourceRepo,
 		News:       newsRepo,
 		Summarizer: summarizer,
+		Scraper: scraper.New(scraper.Options{
+			Timeout:   cfg.ScrapeTimeout,
+			UserAgent: "Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.example)",
+			Logger:    logger,
+		}),
+		ScrapeMax:  cfg.ScrapeMaxPerSource,
 		HTTPClient: &http.Client{Timeout: 30 * time.Second},
 		Logger:     logger,
 	})
