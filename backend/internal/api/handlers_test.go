@@ -9,9 +9,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"neuralwire/backend/internal/auth"
 	"neuralwire/backend/internal/database"
 	"neuralwire/backend/internal/models"
 	"neuralwire/backend/internal/repository"
+)
+
+const (
+	testAdminUser = "admin"
+	testAdminPass = "admin123"
 )
 
 // newTestServer builds a Server backed by an in-memory SQLite database.
@@ -34,11 +40,19 @@ func newTestServer(t *testing.T) *Server {
 		NewsRepo:     repository.NewNewsRepository(db),
 		CategoryRepo: repository.NewCategoryRepository(db),
 		AllowOrigins: []string{"http://localhost:5173", "http://127.0.0.1:5173"},
+		Auth:         auth.NewManager("test-secret", 0),
+		AdminUser:    testAdminUser,
+		AdminPass:    testAdminPass,
 		Logger:       log.New(io.Discard, "", 0),
 	})
 }
 
 func doJSON(t *testing.T, s *Server, method, path string, body any) *httptest.ResponseRecorder {
+	return doJSONAs(t, s, method, path, body, "")
+}
+
+// doJSONAs sends a request with an optional Authorization bearer token.
+func doJSONAs(t *testing.T, s *Server, method, path string, body any, token string) *httptest.ResponseRecorder {
 	t.Helper()
 	var reader io.Reader
 	if body != nil {
@@ -52,9 +66,32 @@ func doJSON(t *testing.T, s *Server, method, path string, body any) *httptest.Re
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
 	return rec
+}
+
+// adminToken logs in and returns a valid bearer token for the test server.
+func adminToken(t *testing.T, s *Server) string {
+	t.Helper()
+	rec := doJSON(t, s, http.MethodPost, "/api/admin/login", map[string]string{
+		"username": testAdminUser,
+		"password": testAdminPass,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var resp loginResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode login: %v", err)
+	}
+	if resp.Token == "" {
+		t.Fatal("login response missing token")
+	}
+	return resp.Token
 }
 
 func decodeNews(t *testing.T, rec *httptest.ResponseRecorder) models.News {
@@ -66,6 +103,15 @@ func decodeNews(t *testing.T, rec *httptest.ResponseRecorder) models.News {
 	return n
 }
 
+func decodeList(t *testing.T, rec *httptest.ResponseRecorder) paginatedResponse {
+	t.Helper()
+	var resp paginatedResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode list: %v (body: %s)", err, rec.Body.String())
+	}
+	return resp
+}
+
 func TestHealth(t *testing.T) {
 	s := newTestServer(t)
 	rec := doJSON(t, s, http.MethodGet, "/api/health", nil)
@@ -74,17 +120,81 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-func TestNewsLifecycle(t *testing.T) {
+func TestLogin(t *testing.T) {
 	s := newTestServer(t)
 
+	// Correct credentials return a token.
+	token := adminToken(t, s)
+	if token == "" {
+		t.Fatal("expected non-empty token")
+	}
+
+	// Wrong password is rejected.
+	bad := doJSON(t, s, http.MethodPost, "/api/admin/login", map[string]string{
+		"username": testAdminUser,
+		"password": "wrong",
+	})
+	if bad.Code != http.StatusUnauthorized {
+		t.Errorf("bad password status = %d, want 401", bad.Code)
+	}
+
+	// Unknown username is rejected.
+	unknown := doJSON(t, s, http.MethodPost, "/api/admin/login", map[string]string{
+		"username": "nobody",
+		"password": testAdminPass,
+	})
+	if unknown.Code != http.StatusUnauthorized {
+		t.Errorf("unknown user status = %d, want 401", unknown.Code)
+	}
+
+	// Malformed body is rejected.
+	malformed := doJSON(t, s, http.MethodPost, "/api/admin/login", "not json")
+	if malformed.Code != http.StatusBadRequest {
+		t.Errorf("malformed login status = %d, want 400", malformed.Code)
+	}
+}
+
+func TestAdminRequiresAuth(t *testing.T) {
+	s := newTestServer(t)
+
+	// No token -> 401.
+	if rec := doJSON(t, s, http.MethodGet, "/api/admin/news", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("admin list without token = %d, want 401", rec.Code)
+	}
+
+	// Garbage token -> 403.
+	if rec := doJSONAs(t, s, http.MethodGet, "/api/admin/news", nil, "garbage"); rec.Code != http.StatusForbidden {
+		t.Errorf("admin list with bad token = %d, want 403", rec.Code)
+	}
+
+	// Token signed with a different secret -> 403.
+	forged := auth.NewManager("other-secret", 0)
+	token, err := forged.IssueToken("admin")
+	if err != nil {
+		t.Fatalf("issue forged token: %v", err)
+	}
+	if rec := doJSONAs(t, s, http.MethodGet, "/api/admin/news", nil, token); rec.Code != http.StatusForbidden {
+		t.Errorf("admin list with forged token = %d, want 403", rec.Code)
+	}
+
+	// The public list endpoint stays open.
+	if rec := doJSON(t, s, http.MethodGet, "/api/news", nil); rec.Code != http.StatusOK {
+		t.Errorf("public list status = %d, want 200", rec.Code)
+	}
+}
+
+func TestNewsLifecycle(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
 	// Create draft.
-	create := doJSON(t, s, http.MethodPost, "/api/admin/news", map[string]any{
+	create := doJSONAs(t, s, http.MethodPost, "/api/admin/news", map[string]any{
 		"title":    "OpenAI announces new model",
 		"url":      "https://openai.com/blog/new-model",
 		"source":   "OpenAI Blog",
 		"category": "ai",
 		"summary":  "A test summary.",
-	})
+	}, token)
 	if create.Code != http.StatusCreated {
 		t.Fatalf("create status = %d, want 201 (body: %s)", create.Code, create.Body.String())
 	}
@@ -101,12 +211,8 @@ func TestNewsLifecycle(t *testing.T) {
 	if list.Code != http.StatusOK {
 		t.Fatalf("list status = %d, want 200", list.Code)
 	}
-	var listed paginatedResponse
-	if err := json.Unmarshal(list.Body.Bytes(), &listed); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	if listed.Pagination.Total != 0 {
-		t.Errorf("public list total = %d, want 0 for drafts", listed.Pagination.Total)
+	if got := decodeList(t, list).Pagination.Total; got != 0 {
+		t.Errorf("public list total = %d, want 0 for drafts", got)
 	}
 
 	// Public detail of a draft returns 404.
@@ -115,8 +221,14 @@ func TestNewsLifecycle(t *testing.T) {
 		t.Errorf("draft detail status = %d, want 404", detail.Code)
 	}
 
+	// Admin detail returns the draft with full content.
+	adminDetail := doJSONAs(t, s, http.MethodGet, "/api/admin/news/"+itoa(created.ID), nil, token)
+	if adminDetail.Code != http.StatusOK {
+		t.Errorf("admin detail status = %d, want 200", adminDetail.Code)
+	}
+
 	// Publish.
-	pub := doJSON(t, s, http.MethodPost, "/api/admin/news/"+itoa(created.ID)+"/publish", nil)
+	pub := doJSONAs(t, s, http.MethodPost, "/api/admin/news/"+itoa(created.ID)+"/publish", nil, token)
 	if pub.Code != http.StatusOK {
 		t.Fatalf("publish status = %d, want 200 (body: %s)", pub.Code, pub.Body.String())
 	}
@@ -130,24 +242,18 @@ func TestNewsLifecycle(t *testing.T) {
 
 	// Now visible.
 	list = doJSON(t, s, http.MethodGet, "/api/news", nil)
-	if err := json.Unmarshal(list.Body.Bytes(), &listed); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	if listed.Pagination.Total != 1 {
-		t.Errorf("public list total = %d, want 1", listed.Pagination.Total)
+	if got := decodeList(t, list).Pagination.Total; got != 1 {
+		t.Errorf("public list total = %d, want 1", got)
 	}
 
 	// Filter by category.
 	byCat := doJSON(t, s, http.MethodGet, "/api/news?category=research", nil)
-	if err := json.Unmarshal(byCat.Body.Bytes(), &listed); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	if listed.Pagination.Total != 0 {
-		t.Errorf("research filtered total = %d, want 0", listed.Pagination.Total)
+	if got := decodeList(t, byCat).Pagination.Total; got != 0 {
+		t.Errorf("research filtered total = %d, want 0", got)
 	}
 
 	// Reject.
-	rej := doJSON(t, s, http.MethodPost, "/api/admin/news/"+itoa(created.ID)+"/reject", nil)
+	rej := doJSONAs(t, s, http.MethodPost, "/api/admin/news/"+itoa(created.ID)+"/reject", nil, token)
 	if rej.Code != http.StatusOK {
 		t.Fatalf("reject status = %d, want 200", rej.Code)
 	}
@@ -157,23 +263,117 @@ func TestNewsLifecycle(t *testing.T) {
 
 	// Rejected article disappears from public list.
 	list = doJSON(t, s, http.MethodGet, "/api/news", nil)
-	if err := json.Unmarshal(list.Body.Bytes(), &listed); err != nil {
-		t.Fatalf("decode list: %v", err)
-	}
-	if listed.Pagination.Total != 0 {
-		t.Errorf("public list total after reject = %d, want 0", listed.Pagination.Total)
+	if got := decodeList(t, list).Pagination.Total; got != 0 {
+		t.Errorf("public list total after reject = %d, want 0", got)
 	}
 
 	// Delete.
-	del := doJSON(t, s, http.MethodDelete, "/api/admin/news/"+itoa(created.ID), nil)
+	del := doJSONAs(t, s, http.MethodDelete, "/api/admin/news/"+itoa(created.ID), nil, token)
 	if del.Code != http.StatusNoContent {
 		t.Fatalf("delete status = %d, want 204", del.Code)
 	}
 
 	// Deleting again returns 404.
-	del = doJSON(t, s, http.MethodDelete, "/api/admin/news/"+itoa(created.ID), nil)
+	del = doJSONAs(t, s, http.MethodDelete, "/api/admin/news/"+itoa(created.ID), nil, token)
 	if del.Code != http.StatusNotFound {
 		t.Errorf("second delete status = %d, want 404", del.Code)
+	}
+}
+
+func TestAdminListIncludesAllStatuses(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	// Three articles: one per status.
+	ids := make([]int64, 3)
+	for i, title := range []string{"Draft story", "Published story", "Rejected story"} {
+		rec := doJSONAs(t, s, http.MethodPost, "/api/admin/news", map[string]any{
+			"title": title,
+			"url":   "https://example.com/" + itoa(int64(i)),
+		}, token)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %d status = %d", i, rec.Code)
+		}
+		ids[i] = decodeNews(t, rec).ID
+	}
+	if err := s.newsRepo.SetStatus(ids[1], models.StatusPublished); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if err := s.newsRepo.SetStatus(ids[2], models.StatusRejected); err != nil {
+		t.Fatalf("reject: %v", err)
+	}
+
+	// Public list only shows the published article.
+	pubList := doJSON(t, s, http.MethodGet, "/api/news", nil)
+	if got := decodeList(t, pubList).Pagination.Total; got != 1 {
+		t.Errorf("public list total = %d, want 1", got)
+	}
+
+	// Admin list shows all three.
+	adminList := doJSONAs(t, s, http.MethodGet, "/api/admin/news", nil, token)
+	if adminList.Code != http.StatusOK {
+		t.Fatalf("admin list status = %d, want 200", adminList.Code)
+	}
+	resp := decodeList(t, adminList)
+	if resp.Pagination.Total != 3 {
+		t.Errorf("admin list total = %d, want 3", resp.Pagination.Total)
+	}
+
+	// Status filter.
+	for _, status := range []models.NewsStatus{models.StatusDraft, models.StatusPublished, models.StatusRejected} {
+		filtered := doJSONAs(t, s, http.MethodGet, "/api/admin/news?status="+string(status), nil, token)
+		got := decodeList(t, filtered).Pagination.Total
+		if got != 1 {
+			t.Errorf("admin list status=%s total = %d, want 1", status, got)
+		}
+		for _, n := range decodeList(t, filtered).Data {
+			if n.Status != status {
+				t.Errorf("admin list status=%s returned status=%s", status, n.Status)
+			}
+		}
+	}
+
+	// Invalid status filter.
+	invalid := doJSONAs(t, s, http.MethodGet, "/api/admin/news?status=bogus", nil, token)
+	if invalid.Code != http.StatusBadRequest {
+		t.Errorf("invalid status = %d, want 400", invalid.Code)
+	}
+
+	// Admin list pagination.
+	paged := doJSONAs(t, s, http.MethodGet, "/api/admin/news?page=1&page_size=2", nil, token)
+	resp = decodeList(t, paged)
+	if len(resp.Data) != 2 || resp.Pagination.TotalPages != 2 {
+		t.Errorf("admin pagination got len=%d pages=%d, want len=2 pages=2", len(resp.Data), resp.Pagination.TotalPages)
+	}
+}
+
+func TestAdminDetailAnyStatus(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	rec := doJSONAs(t, s, http.MethodPost, "/api/admin/news", map[string]any{
+		"title":   "Full article",
+		"url":     "https://example.com/full",
+		"content": "The complete body content.",
+	}, token)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201", rec.Code)
+	}
+	created := decodeNews(t, rec)
+
+	// Draft detail includes content.
+	detail := doJSONAs(t, s, http.MethodGet, "/api/admin/news/"+itoa(created.ID), nil, token)
+	if detail.Code != http.StatusOK {
+		t.Fatalf("admin detail status = %d, want 200", detail.Code)
+	}
+	if got := decodeNews(t, detail).Content; got != "The complete body content." {
+		t.Errorf("admin detail content = %q, want full content", got)
+	}
+
+	// Admin detail of a missing article -> 404.
+	missing := doJSONAs(t, s, http.MethodGet, "/api/admin/news/99999", nil, token)
+	if missing.Code != http.StatusNotFound {
+		t.Errorf("admin detail missing = %d, want 404", missing.Code)
 	}
 }
 
@@ -192,13 +392,15 @@ func TestListValidation(t *testing.T) {
 
 func TestCreateValidation(t *testing.T) {
 	s := newTestServer(t)
-	if rec := doJSON(t, s, http.MethodPost, "/api/admin/news", map[string]any{"title": ""}); rec.Code != http.StatusBadRequest {
+	token := adminToken(t, s)
+
+	if rec := doJSONAs(t, s, http.MethodPost, "/api/admin/news", map[string]any{"title": ""}, token); rec.Code != http.StatusBadRequest {
 		t.Errorf("missing title status = %d, want 400", rec.Code)
 	}
-	if rec := doJSON(t, s, http.MethodPost, "/api/admin/news", map[string]any{"title": "T", "url": ""}); rec.Code != http.StatusBadRequest {
+	if rec := doJSONAs(t, s, http.MethodPost, "/api/admin/news", map[string]any{"title": "T", "url": ""}, token); rec.Code != http.StatusBadRequest {
 		t.Errorf("missing url status = %d, want 400", rec.Code)
 	}
-	if rec := doJSON(t, s, http.MethodPost, "/api/admin/news", "not json"); rec.Code != http.StatusBadRequest {
+	if rec := doJSONAs(t, s, http.MethodPost, "/api/admin/news", "not json", token); rec.Code != http.StatusBadRequest {
 		t.Errorf("bad json status = %d, want 400", rec.Code)
 	}
 }

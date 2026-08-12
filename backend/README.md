@@ -18,6 +18,7 @@ English by default).
 - AI summaries via any OpenAI-compatible API (`gpt-4o-mini` by default);
   falls back to a plain 300-character excerpt when no API key is set
 - CORS enabled for `http://localhost:5173` and `http://127.0.0.1:5173` (SvelteKit dev server)
+- Admin API protected by simple bearer-token auth (`POST /api/admin/login`)
 
 ## Requirements
 
@@ -49,6 +50,9 @@ on first run. On boot it runs an initial RSS fetch and then polls every
 | `AI_SUMMARY_BASE_URL`| `https://api.openai.com/v1`   | OpenAI-compatible API base URL                       |
 | `CRON_SCHEDULE`      | `0 */6 * * *`                 | Cron expression for the RSS fetcher                  |
 | `FETCH_ON_STARTUP`   | `true`                        | Run one fetch cycle when the server boots            |
+| `ADMIN_USERNAME`     | `admin`                       | Admin login username                                 |
+| `ADMIN_PASSWORD`     | `admin123`                    | Admin login password. **Change it outside development** |
+| `ADMIN_TOKEN_SECRET` | dev value (see `.env.example`) | HMAC secret signing admin bearer tokens. **Change it outside development** |
 
 Without `AI_SUMMARY_API_KEY`, articles are summarized by truncating the
 plain-text content to 300 characters.
@@ -69,17 +73,33 @@ envelope.
 
 ### Admin (moderation workflow)
 
+**Authentication:** all `/api/admin/*` routes except `POST /api/admin/login`
+require an `Authorization: Bearer <token>` header. Obtain a token by logging
+in; tokens are HMAC-signed with `ADMIN_TOKEN_SECRET` and expire after 24h.
+
 | Method | Path                              | Description                       |
 | ------ | --------------------------------- | --------------------------------- |
+| POST   | `/api/admin/login`                | Login, returns `{token, token_type, expires_in}` |
+| GET    | `/api/admin/news`                 | All articles (any status); `?status=draft\|published\|rejected`, `?page=`, `?page_size=` |
+| GET    | `/api/admin/news/{id}`            | Full article (including content) regardless of status |
 | POST   | `/api/admin/news`                 | Create a draft article            |
 | POST   | `/api/admin/news/{id}/publish`    | Publish a draft                   |
 | POST   | `/api/admin/news/{id}/reject`     | Reject a draft                    |
 | DELETE | `/api/admin/news/{id}`            | Delete an article                 |
 
+### Login example
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | jq -r .token)
+```
+
 ### Create draft example
 
 ```bash
 curl -X POST http://localhost:8080/api/admin/news \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "OpenAI releases a new model",
@@ -95,17 +115,27 @@ curl -X POST http://localhost:8080/api/admin/news \
 ### Workflow example
 
 ```bash
-# List published news
+# List published news (public, no auth)
 curl http://localhost:8080/api/news?category=ai&page=1&page_size=10
 
+# List all articles including drafts (admin)
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/admin/news?status=draft&page=1&page_size=20"
+
+# Get the full draft article (admin)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/admin/news/{id}
+
 # Publish the draft created above (replace {id})
-curl -X POST http://localhost:8080/api/admin/news/{id}/publish
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/admin/news/{id}/publish
 
 # Reject instead
-curl -X POST http://localhost:8080/api/admin/news/{id}/reject
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/admin/news/{id}/reject
 
 # Delete
-curl -X DELETE http://localhost:8080/api/admin/news/{id}
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/admin/news/{id}
 ```
 
 ## Project layout
@@ -116,6 +146,7 @@ backend/
 └── internal/
     ├── ai/              # OpenAI-compatible summarizer (+ fallback)
     ├── api/             # HTTP handlers, middleware, routing
+    ├── auth/            # HMAC bearer-token issue/validate
     ├── config/          # env-var configuration
     ├── database/        # SQLite open, schema, seed data
     ├── fetcher/         # RSS/Atom polling

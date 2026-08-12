@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"neuralwire/backend/internal/auth"
 	"neuralwire/backend/internal/repository"
 )
 
@@ -14,6 +15,9 @@ type Server struct {
 	newsRepo     *repository.NewsRepository
 	categoryRepo *repository.CategoryRepository
 	allowOrigins []string
+	auth         *auth.Manager
+	adminUser    string
+	adminPass    string
 	logger       *log.Logger
 }
 
@@ -22,6 +26,9 @@ type ServerOptions struct {
 	NewsRepo     *repository.NewsRepository
 	CategoryRepo *repository.CategoryRepository
 	AllowOrigins []string
+	Auth         *auth.Manager
+	AdminUser    string
+	AdminPass    string
 	Logger       *log.Logger
 }
 
@@ -30,6 +37,9 @@ func NewServer(opts ServerOptions) *Server {
 	if len(opts.AllowOrigins) == 0 {
 		opts.AllowOrigins = []string{"http://localhost:5173"}
 	}
+	if opts.Auth == nil {
+		opts.Auth = auth.NewManager("", 0)
+	}
 	if opts.Logger == nil {
 		opts.Logger = log.Default()
 	}
@@ -37,11 +47,15 @@ func NewServer(opts ServerOptions) *Server {
 		newsRepo:     opts.NewsRepo,
 		categoryRepo: opts.CategoryRepo,
 		allowOrigins: opts.AllowOrigins,
+		auth:         opts.Auth,
+		adminUser:    opts.AdminUser,
+		adminPass:    opts.AdminPass,
 		logger:       opts.Logger,
 	}
 }
 
-// Handler assembles the route table and middleware stack.
+// Handler assembles the route table and middleware stack. All routes under
+// /api/admin/ require a bearer token except POST /api/admin/login.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
@@ -50,10 +64,17 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/news/{id}", s.handleGetNews)
 	mux.HandleFunc("GET /api/categories", s.handleListCategories)
 
-	mux.HandleFunc("POST /api/admin/news", s.handleCreateNews)
-	mux.HandleFunc("POST /api/admin/news/{id}/publish", s.handlePublishNews)
-	mux.HandleFunc("POST /api/admin/news/{id}/reject", s.handleRejectNews)
-	mux.HandleFunc("DELETE /api/admin/news/{id}", s.handleDeleteNews)
+	// Admin login is public; every other /api/admin/* route is protected.
+	mux.HandleFunc("POST /api/admin/login", s.handleLogin)
+
+	admin := http.NewServeMux()
+	admin.HandleFunc("GET /api/admin/news", s.handleAdminListNews)
+	admin.HandleFunc("GET /api/admin/news/{id}", s.handleAdminGetNews)
+	admin.HandleFunc("POST /api/admin/news", s.handleCreateNews)
+	admin.HandleFunc("POST /api/admin/news/{id}/publish", s.handlePublishNews)
+	admin.HandleFunc("POST /api/admin/news/{id}/reject", s.handleRejectNews)
+	admin.HandleFunc("DELETE /api/admin/news/{id}", s.handleDeleteNews)
+	mux.Handle("/api/admin/", s.requireAuth(admin))
 
 	return s.recover(s.log(s.cors(mux)))
 }

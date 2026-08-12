@@ -13,6 +13,7 @@ import (
 
 	"neuralwire/backend/internal/ai"
 	"neuralwire/backend/internal/api"
+	"neuralwire/backend/internal/auth"
 	"neuralwire/backend/internal/config"
 	"neuralwire/backend/internal/database"
 	"neuralwire/backend/internal/fetcher"
@@ -45,6 +46,11 @@ func main() {
 	categoryRepo := repository.NewCategoryRepository(db)
 	sourceRepo := repository.NewRSSSourceRepository(db)
 
+	if cfg.AdminUsername == "admin" && cfg.AdminPassword == "admin123" {
+		logger.Printf("WARNING: using default admin credentials. Set ADMIN_USERNAME/ADMIN_PASSWORD before deployment.")
+	}
+	authManager := auth.NewManager(cfg.AdminTokenSecret, 0)
+
 	summarizer := ai.NewSummarizer(ai.SummarizerOptions{
 		APIKey:  cfg.AISummaryAPIKey,
 		Model:   cfg.AISummaryModel,
@@ -74,6 +80,9 @@ func main() {
 		NewsRepo:     newsRepo,
 		CategoryRepo: categoryRepo,
 		AllowOrigins: cfg.CORSAllowOrigins,
+		Auth:         authManager,
+		AdminUser:    cfg.AdminUsername,
+		AdminPass:    cfg.AdminPassword,
 		Logger:       logger,
 	})
 

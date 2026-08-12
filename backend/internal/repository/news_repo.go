@@ -117,6 +117,45 @@ func (r *NewsRepository) ListPublished(category string, page, pageSize int) ([]m
 	return news, total, nil
 }
 
+// ListAdmin returns a page of articles across all statuses ordered by
+// creation date descending. An empty status filter includes everything.
+func (r *NewsRepository) ListAdmin(status string, page, pageSize int) ([]models.News, int, error) {
+	where := ""
+	args := []any{}
+	if status != "" {
+		where = "WHERE status = ?"
+		args = append(args, status)
+	}
+
+	var total int
+	if err := r.db.QueryRow(`SELECT COUNT(*) FROM news `+where, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count admin news: %w", err)
+	}
+
+	query := `SELECT ` + newsColumns + ` FROM news ` + where +
+		` ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`
+	args = append(args, pageSize, (page-1)*pageSize)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list admin news: %w", err)
+	}
+	defer rows.Close()
+
+	news := make([]models.News, 0, pageSize)
+	for rows.Next() {
+		n, err := scanNews(rows)
+		if err != nil {
+			return nil, 0, err
+		}
+		news = append(news, *n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, fmt.Errorf("iterate admin news: %w", err)
+	}
+	return news, total, nil
+}
+
 // SetStatus transitions an article to the given status. When publishing,
 // published_at is set to now unless it is already set.
 func (r *NewsRepository) SetStatus(id int64, status models.NewsStatus) error {

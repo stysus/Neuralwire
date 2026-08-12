@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -109,6 +110,125 @@ func (s *Server) handleListCategories(w http.ResponseWriter, r *http.Request) {
 }
 
 // --- admin handlers -------------------------------------------------------
+
+type loginRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type loginResponse struct {
+	Token     string `json:"token"`
+	TokenType string `json:"token_type"`
+	ExpiresIn int64  `json:"expires_in"`
+}
+
+// handleLogin authenticates admin credentials and returns a signed bearer
+// token. It is the only public route under /api/admin/.
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var req loginRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if !s.validCredentials(req.Username, req.Password) {
+		s.writeError(w, http.StatusUnauthorized, "invalid credentials")
+		return
+	}
+
+	token, err := s.auth.IssueToken(req.Username)
+	if err != nil {
+		s.logger.Printf("api: issue token: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to issue token")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, loginResponse{
+		Token:     token,
+		TokenType: "Bearer",
+		ExpiresIn: int64(s.auth.TokenTTL().Seconds()),
+	})
+}
+
+// validCredentials compares credentials in constant time so timing does not
+// leak whether the username or the password was wrong.
+func (s *Server) validCredentials(username, password string) bool {
+	userOK := subtle.ConstantTimeCompare([]byte(username), []byte(s.adminUser)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(s.adminPass)) == 1
+	return userOK && passOK
+}
+
+// handleAdminListNews returns a paginated list of every article, optionally
+// filtered by status. Unlike the public endpoint, drafts and rejected
+// articles are included.
+func (s *Server) handleAdminListNews(w http.ResponseWriter, r *http.Request) {
+	status := models.NewsStatus(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status != "" && !status.Valid() {
+		s.writeError(w, http.StatusBadRequest, "invalid status parameter (want draft, published or rejected)")
+		return
+	}
+
+	page, err := parsePositiveInt(r.URL.Query().Get("page"), 1)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid page parameter")
+		return
+	}
+	pageSize, err := parsePositiveInt(r.URL.Query().Get("page_size"), defaultPageSize)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid page_size parameter")
+		return
+	}
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	news, total, err := s.newsRepo.ListAdmin(string(status), page, pageSize)
+	if err != nil {
+		s.logger.Printf("api: admin list news: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to list news")
+		return
+	}
+
+	totalPages := 0
+	if total > 0 {
+		totalPages = (total + pageSize - 1) / pageSize
+	}
+	if news == nil {
+		news = []models.News{}
+	}
+
+	s.writeJSON(w, http.StatusOK, paginatedResponse{
+		Data: news,
+		Pagination: pagination{
+			Page:       page,
+			PageSize:   pageSize,
+			Total:      total,
+			TotalPages: totalPages,
+		},
+	})
+}
+
+// handleAdminGetNews returns the full article (including content) for any
+// status.
+func (s *Server) handleAdminGetNews(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid news id")
+		return
+	}
+
+	news, err := s.newsRepo.GetByID(id)
+	if err != nil {
+		s.logger.Printf("api: admin get news %d: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to load news")
+		return
+	}
+	if news == nil {
+		s.writeError(w, http.StatusNotFound, "news not found")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, news)
+}
 
 type createNewsRequest struct {
 	Title    string `json:"title"`

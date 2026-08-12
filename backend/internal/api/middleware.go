@@ -1,10 +1,54 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 )
+
+// contextKey is a private type for request context values.
+type contextKey string
+
+// ctxUsername carries the authenticated username through the request.
+const ctxUsername contextKey = "username"
+
+// requireAuth protects the admin API. Requests without an Authorization
+// header get 401; requests with an invalid or expired token get 403.
+func (s *Server) requireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, ok := bearerToken(r)
+		if !ok {
+			s.writeError(w, http.StatusUnauthorized, "unauthorized: missing bearer token")
+			return
+		}
+
+		username, err := s.auth.Validate(token)
+		if err != nil {
+			s.writeError(w, http.StatusForbidden, "forbidden: invalid or expired token")
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), ctxUsername, username)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// bearerToken extracts the token from an "Authorization: Bearer <token>"
+// header. It reports false when the header is absent or malformed.
+func bearerToken(r *http.Request) (string, bool) {
+	header := r.Header.Get("Authorization")
+	token, ok := strings.CutPrefix(header, "Bearer ")
+	if !ok {
+		return "", false
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return "", false
+	}
+	return token, true
+}
 
 // cors adds scoped CORS headers for the configured origins and
 // short-circuits preflight requests. The origin is echoed back only when it

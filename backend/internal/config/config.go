@@ -28,6 +28,12 @@ type Config struct {
 	CronSchedule string
 	// FetchOnStartup triggers one fetch run when the server boots.
 	FetchOnStartup bool
+	// AdminUsername is the login for POST /api/admin/login.
+	AdminUsername string
+	// AdminPassword is the login password. Change it outside development.
+	AdminPassword string
+	// AdminTokenSecret signs admin bearer tokens. Change it outside dev.
+	AdminTokenSecret string
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -58,6 +64,9 @@ func Load() (Config, error) {
 		AISummaryProvider: getenv("AI_SUMMARY_PROVIDER", ""),
 		CronSchedule:      getenv("CRON_SCHEDULE", "0 */6 * * *"),
 		FetchOnStartup:    fetchOnStartup,
+		AdminUsername:     getenv("ADMIN_USERNAME", "admin"),
+		AdminPassword:     getenv("ADMIN_PASSWORD", "admin123"),
+		AdminTokenSecret:  getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
 	}, nil
 }
 

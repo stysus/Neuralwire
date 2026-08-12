@@ -268,6 +268,11 @@
 							>ABOUT EDITORIAL</a
 						>
 					</li>
+					<li>
+						<a href="/admin" class="text-slate-500 transition-colors hover:text-[#22D3EE]/80"
+							>ADMIN PANEL</a
+						>
+					</li>
 				</ul>
 			</div>
 
