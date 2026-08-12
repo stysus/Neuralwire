@@ -1,0 +1,308 @@
+<script lang="ts">
+	import type { PageData } from './$types';
+	import type { News } from '$lib/mockData';
+
+	let { data }: { data: PageData } = $props();
+
+	// Active category filter (for the grid, leaving the hero as the absolute latest)
+	let activeCategory = $state('all');
+
+	// Compute filtered news for the feed grid
+	const articles = $derived(data.news as News[]);
+	const featuredArticle = $derived(articles[0]);
+	const feedArticles = $derived(articles.slice(1));
+
+	const filteredFeed = $derived(
+		activeCategory === 'all'
+			? feedArticles
+			: feedArticles.filter((item) => item.category === activeCategory)
+	);
+
+	const categories = $derived([
+		{ name: 'All News', slug: 'all' },
+		...((data.categories as any[]) || []).map((c) => ({ name: c.name, slug: c.slug }))
+	]);
+
+	// Helpers
+	function formatDate(dateStr: string) {
+		const d = new Date(dateStr);
+		return d.toLocaleDateString('en-US', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		});
+	}
+
+	function getReadingTime(text: string) {
+		const words = text.split(/\s+/).length;
+		const minutes = Math.ceil(words / 220); // average speed
+		return `${minutes} min read`;
+	}
+
+	function getCategoryName(slug: string) {
+		const found = data.categories?.find((c: any) => c.slug === slug);
+		return found ? found.name : slug.replace('-', ' ');
+	}
+</script>
+
+<!-- Hero Section -->
+{#if featuredArticle}
+	<section
+		class="relative overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#080B12]/80 py-12 md:py-20 lg:py-24"
+	>
+		<!-- Subtle light beam behind hero -->
+		<div
+			class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(34,211,238,0.05),transparent_60%)]"
+		></div>
+
+		<div class="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+			<div class="grid grid-cols-1 items-center gap-8 lg:grid-cols-12 lg:gap-12">
+				<!-- Hero Text Details -->
+				<div class="flex flex-col space-y-4 md:space-y-6 lg:col-span-7">
+					<!-- Category and Meta -->
+					<div class="flex items-center space-x-3 text-xs">
+						<a
+							href="/category/{featuredArticle.category}"
+							class="tag-mono rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-2 py-0.5 font-bold text-[#22D3EE] transition-colors hover:bg-[#22D3EE]/10"
+						>
+							{getCategoryName(featuredArticle.category)}
+						</a>
+						<span class="font-mono text-slate-500">•</span>
+						<span class="font-mono text-slate-400">{formatDate(featuredArticle.published_at)}</span>
+						<span class="font-mono text-slate-500">•</span>
+						<span class="font-mono text-slate-400">{getReadingTime(featuredArticle.content)}</span>
+					</div>
+
+					<!-- Hero Headline -->
+					<a href="/{featuredArticle.slug}" class="group">
+						<h1
+							class="font-serif text-3xl leading-tight font-medium tracking-tight text-white transition-colors group-hover:text-[#22D3EE]/90 sm:text-4xl md:text-5xl lg:text-6xl"
+						>
+							{featuredArticle.title}
+						</h1>
+					</a>
+
+					<!-- Hero Summary -->
+					<p
+						class="max-w-2xl font-sans text-sm leading-relaxed font-light text-slate-400 md:text-base"
+					>
+						{featuredArticle.summary}
+					</p>
+
+					<!-- Author / Source and Call to Action -->
+					<div
+						class="flex items-center justify-between border-t border-[rgba(255,255,255,0.05)] pt-4"
+					>
+						<div class="flex items-center space-x-2">
+							<div
+								class="flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(255,255,255,0.1)] bg-[#0F172A] font-mono text-[10px] text-slate-400 uppercase"
+							>
+								NW
+							</div>
+							<div>
+								<p class="text-xs font-semibold text-slate-200">{featuredArticle.source}</p>
+								<p class="font-mono text-[10px] text-slate-500">CORRESPONDENT</p>
+							</div>
+						</div>
+
+						<a
+							href="/{featuredArticle.slug}"
+							class="group inline-flex items-center space-x-2 rounded-lg border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-4 py-2 font-mono text-xs text-[#22D3EE] transition-all duration-300 hover:border-[#22D3EE]/50 hover:bg-[#22D3EE]/10 hover:text-white"
+						>
+							<span>READ FULL BRIEF</span>
+							<svg
+								class="h-3.5 w-3.5 transform transition-transform group-hover:translate-x-1"
+								fill="none"
+								viewBox="0 0 24 24"
+								stroke="currentColor"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M14 5l7 7m0 0l-7 7m7-7H3"
+								/>
+							</svg>
+						</a>
+					</div>
+				</div>
+
+				<!-- Hero Visual -->
+				<div class="group relative lg:col-span-5">
+					<!-- Glow underlying background -->
+					<div
+						class="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-500/20 to-purple-500/10 opacity-30 blur-xl transition duration-1000 group-hover:opacity-50 group-hover:duration-200"
+					></div>
+
+					<div
+						class="relative aspect-[4/3] w-full scale-[0.99] overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A] transition-all duration-500 group-hover:scale-100"
+					>
+						{#if featuredArticle.image_url}
+							<img
+								src={featuredArticle.image_url}
+								alt={featuredArticle.title}
+								class="h-full w-full object-cover opacity-90 grayscale transition-all duration-700 group-hover:opacity-100 group-hover:grayscale-0"
+							/>
+						{:else}
+							<!-- Cyber pattern fallback -->
+							<div
+								class="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0F172A] to-[#1E293B]"
+							>
+								<div class="bg-grid-pattern absolute inset-0 opacity-15"></div>
+								<div class="absolute h-48 w-48 rounded-full bg-[#22D3EE]/5 blur-3xl"></div>
+								<span class="font-mono text-xs tracking-widest text-[#22D3EE]/40 uppercase"
+									>NEURALWIRE IMAGING</span
+								>
+							</div>
+						{/if}
+						<div
+							class="absolute inset-0 bg-gradient-to-t from-[#0A0E17] via-transparent to-transparent opacity-40"
+						></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+{/if}
+
+<!-- News Feed Section -->
+<section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+	<!-- Feed Title & Categories Filter -->
+	<div
+		class="mb-8 flex flex-col justify-between gap-4 border-b border-[rgba(255,255,255,0.08)] pb-6 md:flex-row md:items-end"
+	>
+		<div>
+			<h2 class="mb-1 font-mono text-xs font-bold tracking-widest text-[#22D3EE] uppercase">
+				Chronicle Feed
+			</h2>
+			<h3 class="font-serif text-2xl font-medium text-white md:text-3xl">LATEST TRANSMISSIONS</h3>
+		</div>
+
+		<!-- Category Tabs -->
+		<div class="flex flex-wrap gap-2">
+			{#each categories as cat}
+				<button
+					onclick={() => (activeCategory = cat.slug)}
+					class="rounded-lg border px-3 py-1.5 font-mono text-xs tracking-wider uppercase transition-all
+						{activeCategory === cat.slug
+						? 'accent-glow-glow border-[#22D3EE]/40 bg-[#22D3EE]/10 text-[#22D3EE]'
+						: 'border-[rgba(255,255,255,0.05)] bg-[#0F172A]/40 text-slate-400 hover:border-[rgba(255,255,255,0.15)] hover:text-white'}"
+				>
+					{cat.name}
+				</button>
+			{/each}
+		</div>
+	</div>
+
+	<!-- News Grid -->
+	{#if filteredFeed.length > 0}
+		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8">
+			{#each filteredFeed as post}
+				<article
+					class="group glow-hover flex flex-col overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/25"
+				>
+					<!-- Thumbnail -->
+					<a
+						href="/{post.slug}"
+						class="relative block aspect-[16/10] w-full overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#0A0E17]"
+					>
+						{#if post.image_url}
+							<img
+								src={post.image_url}
+								alt={post.title}
+								class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+								loading="lazy"
+							/>
+						{:else}
+							<div
+								class="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0A0E17] to-[#0F172A]"
+							>
+								<div class="bg-grid-pattern absolute inset-0 opacity-10"></div>
+								<div class="absolute h-24 w-24 rounded-full bg-[#22D3EE]/3 blur-2xl"></div>
+								<span class="font-mono text-[9px] tracking-widest text-[#22D3EE]/35 uppercase"
+									>NW PROTOCOL</span
+								>
+							</div>
+						{/if}
+						<div class="absolute bottom-2 left-2">
+							<span
+								class="tag-mono rounded border border-[#22D3EE]/30 bg-[#0A0E17]/90 px-2 py-0.5 text-[10px] font-bold text-[#22D3EE] backdrop-blur-sm"
+							>
+								{getCategoryName(post.category)}
+							</span>
+						</div>
+					</a>
+
+					<!-- Card Body -->
+					<div class="flex flex-grow flex-col space-y-3 p-5">
+						<!-- Meta -->
+						<div class="flex items-center space-x-2 font-mono text-[10px] text-slate-500">
+							<span>{formatDate(post.published_at)}</span>
+							<span>•</span>
+							<span>{getReadingTime(post.content)}</span>
+						</div>
+
+						<!-- Title -->
+						<h4
+							class="flex-grow font-serif text-lg leading-snug font-normal text-white transition-colors group-hover:text-[#22D3EE]"
+						>
+							<a href="/{post.slug}" class="line-clamp-2">
+								{post.title}
+							</a>
+						</h4>
+
+						<!-- Summary -->
+						<p class="line-clamp-3 font-sans text-xs leading-relaxed font-light text-slate-400">
+							{post.summary}
+						</p>
+
+						<!-- Footer/Source -->
+						<div
+							class="flex items-center justify-between border-t border-[rgba(255,255,255,0.05)] pt-4 font-mono text-[10px] text-slate-500"
+						>
+							<span class="text-slate-400">{post.source.toUpperCase()}</span>
+							<a
+								href="/{post.slug}"
+								class="flex items-center space-x-1 text-[#22D3EE]/70 group-hover:text-[#22D3EE]"
+							>
+								<span>READ</span>
+								<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M9 5l7 7-7 7"
+									/>
+								</svg>
+							</a>
+						</div>
+					</div>
+				</article>
+			{/each}
+		</div>
+	{:else}
+		<!-- Empty State -->
+		<div
+			class="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/25 px-4 py-24 text-center"
+		>
+			<div
+				class="mx-auto mb-4 flex h-16 w-16 animate-pulse items-center justify-center rounded-full border border-dashed border-[#22D3EE]/30 bg-[#22D3EE]/5"
+			>
+				<svg class="h-6 w-6 text-[#22D3EE]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2"
+						d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"
+					/>
+				</svg>
+			</div>
+			<p class="mb-2 font-mono text-sm tracking-wider text-[#22D3EE] uppercase">
+				No Transmissions Found
+			</p>
+			<p class="mx-auto max-w-sm text-xs text-slate-500">
+				There are no reports currently registered under the selected matrix category.
+			</p>
+		</div>
+	{/if}
+</section>

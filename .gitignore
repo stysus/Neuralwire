@@ -1,0 +1,18 @@
+# Local Go toolchain used by agents for verification (not part of the project)
+.tools/
+
+# Go build output
+backend/bin/
+
+# SQLite database files
+backend/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Environment files
+.env
+backend/.env
+
+# Local review screenshots
+*.screenshot.png
