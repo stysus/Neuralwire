@@ -1,6 +1,8 @@
 // Package scraper fetches article URLs and extracts the full readable
-// content (title + body text) from the HTML. It uses a readability-style
-// extraction that strips navigation, ads, sidebars and other boilerplate.
+// content (title + clean HTML body) from the page. It uses a
+// readability-style extraction that strips navigation, ads, sidebars and
+// other boilerplate while preserving the article's semantic structure
+// (headings, paragraphs, lists, figures and images).
 package scraper
 
 import (
@@ -12,18 +14,22 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
 	readability "codeberg.org/readeck/go-readability/v2"
 	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 )
 
 // Article is the extracted readable content of a single web page.
 type Article struct {
 	// Title is the cleaned page title; it may be empty.
 	Title string
-	// Content is the readable body text with boilerplate removed.
+	// Content is the clean article HTML with boilerplate removed and all
+	// media URLs rewritten to absolute form. It is safe to render with
+	// Svelte's {@html ...}.
 	Content string
 	// URL is the final URL after redirects were followed.
 	URL string
@@ -130,13 +136,18 @@ func (s *Scraper) Scrape(ctx context.Context, rawURL string) (*Article, error) {
 	if err != nil {
 		return nil, fmt.Errorf("extract readable content: %w", err)
 	}
+	if article.Node == nil {
+		return nil, errors.New("no readable content found")
+	}
 
-	var text strings.Builder
-	if err := article.RenderText(&text); err != nil {
+	// Render the extracted article as clean HTML, keeping headings,
+	// paragraphs, lists, figures and images, and rewrite media URLs to
+	// absolute against the final (post-redirect) URL.
+	content, err := renderArticleHTML(article.Node, pageURL)
+	if err != nil {
 		return nil, fmt.Errorf("render readable content: %w", err)
 	}
-	content := normalizeText(text.String())
-	if content == "" {
+	if strings.TrimSpace(content) == "" {
 		return nil, errors.New("no readable content found")
 	}
 
@@ -175,37 +186,129 @@ func stripBoilerplate(body []byte) ([]byte, error) {
 	return []byte(html), nil
 }
 
+// placeholderRegex matches leftover template placeholders such as
+// [[duration]] or [[reading_time]].
+var placeholderRegex = regexp.MustCompile(`\[\[[^\]]*\]\]`)
+
+// renderArticleHTML serializes the extracted article node as clean HTML and
+// post-processes it: media URLs (img src/srcset, source, video poster) are
+// rewritten to absolute URLs, leftover template placeholders and empty links
+// are removed, and stray scripts are dropped.
+func renderArticleHTML(node *html.Node, base *url.URL) (string, error) {
+	doc := goquery.NewDocumentFromNode(node)
+
+	// Stray scripts/styles should never survive extraction.
+	doc.Find("script, style, noscript").Remove()
+
+	// Drop elements whose entire content is a template placeholder, e.g.
+	// <time>[[duration]]</time>.
+	doc.Find("span, div, time, p, figure, figcaption, li, a, i, em, strong, small, b, td, th").
+		Each(func(_ int, s *goquery.Selection) {
+			if isPlaceholderOnly(s.Text()) {
+				s.Remove()
+			}
+		})
+
+	// Remove links that carry neither text nor a destination.
+	doc.Find("a").Each(func(_ int, s *goquery.Selection) {
+		if strings.TrimSpace(s.Text()) == "" && s.AttrOr("href", "") == "" {
+			s.Remove()
+		}
+	})
+
+	// Rewrite media URLs to absolute against the final article URL.
+	doc.Find("img").Each(func(_ int, s *goquery.Selection) {
+		src := s.AttrOr("src", "")
+		if src == "" {
+			src = s.AttrOr("data-src", "")
+		}
+		if abs, err := resolveURL(base, src); err == nil {
+			s.SetAttr("src", abs)
+		}
+		if sset := s.AttrOr("srcset", ""); sset != "" {
+			s.SetAttr("srcset", resolveSrcset(base, sset))
+		}
+	})
+	doc.Find("source").Each(func(_ int, s *goquery.Selection) {
+		if src := s.AttrOr("src", ""); src != "" {
+			if abs, err := resolveURL(base, src); err == nil {
+				s.SetAttr("src", abs)
+			}
+		}
+		if sset := s.AttrOr("srcset", ""); sset != "" {
+			s.SetAttr("srcset", resolveSrcset(base, sset))
+		}
+	})
+	doc.Find("video").Each(func(_ int, s *goquery.Selection) {
+		if poster := s.AttrOr("poster", ""); poster != "" {
+			if abs, err := resolveURL(base, poster); err == nil {
+				s.SetAttr("poster", abs)
+			}
+		}
+	})
+
+	out, err := doc.Html()
+	if err != nil {
+		return "", err
+	}
+
+	// Safety net: strip any placeholder syntax that survived element removal.
+	out = placeholderRegex.ReplaceAllString(out, "")
+	return strings.TrimSpace(out), nil
+}
+
+// isPlaceholderOnly reports whether s contains some text but nothing beyond
+// template placeholders and whitespace. Empty text is never placeholder-only,
+// so containers holding only media (e.g. <figure><img></figure>) survive.
+func isPlaceholderOnly(s string) bool {
+	if strings.TrimSpace(s) == "" {
+		return false
+	}
+	stripped := placeholderRegex.ReplaceAllString(s, "")
+	return strings.TrimSpace(stripped) == ""
+}
+
+// resolveURL resolves ref against base. It returns data/blob/mailto/
+// javascript/tel URIs untouched, and handles protocol-relative URLs.
+func resolveURL(base *url.URL, ref string) (string, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return "", errors.New("empty url")
+	}
+	switch {
+	case strings.HasPrefix(strings.ToLower(ref), "data:"),
+		strings.HasPrefix(strings.ToLower(ref), "blob:"),
+		strings.HasPrefix(strings.ToLower(ref), "mailto:"),
+		strings.HasPrefix(strings.ToLower(ref), "javascript:"),
+		strings.HasPrefix(strings.ToLower(ref), "tel:"):
+		return ref, nil
+	}
+	u, err := url.Parse(ref)
+	if err != nil {
+		return "", err
+	}
+	return base.ResolveReference(u).String(), nil
+}
+
+// resolveSrcset rewrites every URL in an HTML srcset attribute
+// ("url1 1x, url2 2x") to absolute.
+func resolveSrcset(base *url.URL, srcset string) string {
+	parts := strings.Split(srcset, ",")
+	for i, part := range parts {
+		fields := strings.Fields(part)
+		if len(fields) == 0 {
+			continue
+		}
+		if abs, err := resolveURL(base, fields[0]); err == nil {
+			fields[0] = abs
+		}
+		parts[i] = strings.Join(fields, " ")
+	}
+	return strings.Join(parts, ", ")
+}
+
 // isHTMLContentType reports whether a Content-Type header looks like HTML.
 func isHTMLContentType(ct string) bool {
 	ct = strings.ToLower(ct)
 	return strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml+xml")
-}
-
-// normalizeText trims every line and collapses runs of blank lines so the
-// stored body text is clean and compact.
-func normalizeText(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	lines := strings.Split(s, "\n")
-
-	out := make([]string, 0, len(lines))
-	prevEmpty := false
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			if !prevEmpty && len(out) > 0 {
-				out = append(out, "")
-			}
-			prevEmpty = true
-			continue
-		}
-		out = append(out, line)
-		prevEmpty = false
-	}
-	for len(out) > 0 && out[0] == "" {
-		out = out[1:]
-	}
-	for len(out) > 0 && out[len(out)-1] == "" {
-		out = out[:len(out)-1]
-	}
-	return strings.Join(out, "\n")
 }

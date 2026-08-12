@@ -72,10 +72,15 @@ extraction for each new article:
    default 20) it fetches the article URL and extracts the full readable body
    with a readability algorithm (codeberg.org/readeck/go-readability/v2),
    after stripping navigation, ads, sidebars and interactive widgets.
-2. If scraping succeeds, the scraped body becomes the article `content` (and
+2. The extracted article is stored as **clean HTML** (headings, paragraphs,
+   lists, figures and images preserved), so the frontend can render it with
+   `{@html ...}`. Image `src`/`srcset`, `<source>` and `<video poster>`
+   URLs are rewritten to absolute against the final (post-redirect) URL,
+   and leftover template placeholders such as `[[duration]]` are removed.
+3. If scraping succeeds, the scraped HTML becomes the article `content` (and
    a better scraped title replaces the RSS title). The AI summarizer then
    summarizes the **full** scraped content.
-3. If scraping fails, times out (`SCRAPE_TIMEOUT_SECONDS`, default 15s) or
+4. If scraping fails, times out (`SCRAPE_TIMEOUT_SECONDS`, default 15s) or
    the budget is exceeded, the article falls back to the RSS excerpt
    (`item.Content` / `item.Description`).
 

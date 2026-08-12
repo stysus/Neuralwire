@@ -7,6 +7,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.12.0
 	github.com/mmcdole/gofeed v1.4.1
 	github.com/robfig/cron/v3 v3.0.1
+	golang.org/x/net v0.57.0
 	modernc.org/sqlite v1.56.0
 )
 
@@ -21,7 +22,6 @@ require (
 	github.com/mmcdole/goxpp/v2 v2.0.0 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 	modernc.org/libc v1.74.4 // indirect
