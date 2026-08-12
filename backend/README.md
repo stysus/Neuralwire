@@ -13,8 +13,9 @@ English by default).
   - Hugging Face Blog
   - arXiv cs.AI
   - Reddit r/artificial
-- Cron scheduler (default: every 6 hours) that fetches feeds and inserts
-  articles as **drafts** (semi-automatic moderation workflow)
+- **Manual RSS ingestion** (no background scheduler): trigger a fetch cycle
+  with `POST /api/admin/fetch`; fetched articles land as **drafts** in a
+  semi-automatic moderation workflow
 - Full-content scraper: RSS excerpts are too short, so the fetcher scrapes
   the newest articles per source for their full readable body (readability
   extraction + boilerplate stripping), falling back to the RSS excerpt when
@@ -38,9 +39,9 @@ go build -o bin/server ./cmd/server
 ```
 
 The server listens on `http://localhost:8080` and creates `data/neuralwire.db`
-on first run. It polls feeds on the cron schedule every 6 hours;
-`FETCH_ON_STARTUP` defaults to **false**, so restarting the server does not
-re-fetch feeds (set it to `true` explicitly if you want a fetch on boot).
+on first run. RSS ingestion is **manual**: there is no automatic fetching or
+cron scheduler, so restarts never flood the drafts table. Trigger a fetch
+cycle with `POST /api/admin/fetch` (see below).
 
 ## Environment variables
 
@@ -53,8 +54,6 @@ re-fetch feeds (set it to `true` explicitly if you want a fetch on boot).
 | `AI_SUMMARY_PROVIDER`| `openai`                      | Preset: `openai`, `gemini`, `openrouter`, `groq`, `ollama` |
 | `AI_SUMMARY_MODEL`   | `gpt-4o-mini`                 | Model used for summaries                             |
 | `AI_SUMMARY_BASE_URL`| `https://api.openai.com/v1`   | OpenAI-compatible API base URL                       |
-| `CRON_SCHEDULE`      | `0 */6 * * *`                 | Cron expression for the RSS fetcher                  |
-| `FETCH_ON_STARTUP`   | `false`                       | Run one fetch cycle when the server boots (default off to avoid draft floods on restart) |
 | `SCRAPE_MAX_PER_SOURCE` | `20`                       | Newest articles scraped per source per cycle         |
 | `SCRAPE_TIMEOUT_SECONDS` | `15`                      | Per-article scrape timeout (seconds)                 |
 | `SCRAPE_MIN_CONTENT_CHARS` | `500`                    | Minimum content length for a fetched draft; shorter articles are skipped as low quality |
@@ -67,8 +66,25 @@ plain-text content to 300 characters.
 
 ## How full-content scraping works
 
-RSS feeds only expose short excerpts, so the fetcher runs a hybrid
-extraction for each new article:
+There is **no background scheduler** — fetching only happens when an
+authenticated admin calls `POST /api/admin/fetch`, which runs one fetch cycle
+across all sources and returns per-source statistics:
+
+```json
+{
+  "total_new": 3,
+  "scraped": 2,
+  "fallback": 1,
+  "skipped_low_quality": 10,
+  "sources": [
+    { "name": "OpenAI Blog", "inserted": 2, "scraped": 2, "fallback": 0, "skipped_low_quality": 0 },
+    { "name": "Reddit r/artificial", "inserted": 1, "scraped": 0, "fallback": 1, "skipped_low_quality": 0 }
+  ]
+}
+```
+
+RSS feeds only expose short excerpts, so each new article goes through a
+hybrid extraction:
 
 1. For the **newest N articles per source per cycle** (`SCRAPE_MAX_PER_SOURCE`,
    default 20) it fetches the article URL and extracts the full readable body
@@ -119,12 +135,25 @@ in; tokens are HMAC-signed with `ADMIN_TOKEN_SECRET` and expire after 24h.
 | Method | Path                              | Description                       |
 | ------ | --------------------------------- | --------------------------------- |
 | POST   | `/api/admin/login`                | Login, returns `{token, token_type, expires_in}` |
+| POST   | `/api/admin/fetch`                | Manually trigger one RSS fetch cycle, returns fetch stats |
 | GET    | `/api/admin/news`                 | All articles (any status); `?status=draft\|published\|rejected`, `?page=`, `?page_size=` |
 | GET    | `/api/admin/news/{id}`            | Full article (including content) regardless of status |
 | POST   | `/api/admin/news`                 | Create a draft article            |
 | POST   | `/api/admin/news/{id}/publish`    | Publish a draft                   |
 | POST   | `/api/admin/news/{id}/reject`     | Reject a draft                    |
 | DELETE | `/api/admin/news/{id}`            | Delete an article                 |
+
+### Manual fetch example
+
+```bash
+TOKEN=$(curl -s -X POST http://localhost:8080/api/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin123"}' | jq -r .token)
+
+curl -X POST http://localhost:8080/api/admin/fetch \
+  -H "Authorization: Bearer $TOKEN"
+# => {"total_new":3,"scraped":2,"fallback":1,"skipped_low_quality":10,"sources":[...]}
+```
 
 ### Login example
 
@@ -191,7 +220,6 @@ backend/
     ├── fetcher/         # RSS/Atom polling
     ├── models/          # domain types
     ├── repository/      # SQL data access
-    ├── scheduler/       # cron scheduling
     ├── scraper/         # full-content extraction (readability + cleanup)
     └── slug/            # slug helpers
 ```

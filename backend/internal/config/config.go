@@ -25,10 +25,6 @@ type Config struct {
 	AISummaryBaseURL string
 	// AISummaryProvider is a named preset that sets BaseURL/Model defaults.
 	AISummaryProvider string
-	// CronSchedule is the cron expression for the RSS fetcher.
-	CronSchedule string
-	// FetchOnStartup triggers one fetch run when the server boots.
-	FetchOnStartup bool
 	// AdminUsername is the login for POST /api/admin/login.
 	AdminUsername string
 	// AdminPassword is the login password. Change it outside development.
@@ -51,11 +47,6 @@ type Config struct {
 // environment.
 func Load() (Config, error) {
 	loadDotEnv(".env")
-
-	fetchOnStartup, err := getenvBool("FETCH_ON_STARTUP", false)
-	if err != nil {
-		return Config{}, err
-	}
 
 	baseURL, model := summaryDefaults(
 		getenv("AI_SUMMARY_PROVIDER", ""),
@@ -84,8 +75,6 @@ func Load() (Config, error) {
 		AISummaryModel:        model,
 		AISummaryBaseURL:      baseURL,
 		AISummaryProvider:     getenv("AI_SUMMARY_PROVIDER", ""),
-		CronSchedule:          getenv("CRON_SCHEDULE", "0 */6 * * *"),
-		FetchOnStartup:        fetchOnStartup,
 		AdminUsername:         getenv("ADMIN_USERNAME", "admin"),
 		AdminPassword:         getenv("ADMIN_PASSWORD", "admin123"),
 		AdminTokenSecret:      getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
@@ -151,18 +140,6 @@ func getenv(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-func getenvBool(key string, fallback bool) (bool, error) {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback, nil
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return false, err
-	}
-	return b, nil
 }
 
 // getenvInt parses an integer environment variable, returning the fallback

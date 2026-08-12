@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
@@ -170,7 +172,7 @@ func TestProcessFeedUsesScrapedContent(t *testing.T) {
 	feed := testFeed(
 		testItem("RSS Title", "https://example.com/a", "Short excerpt A"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -194,7 +196,7 @@ func TestProcessFeedFallsBackOnScrapeError(t *testing.T) {
 	feed := testFeed(
 		testItem("RSS Title", "https://example.com/a", "<p>Excerpt A</p>"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -222,7 +224,7 @@ func TestProcessFeedNoScraperUsesExcerpt(t *testing.T) {
 	// First item has no content/description at all.
 	fi := feed.Items[0]
 	fi.Description = "Description fallback A"
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -251,7 +253,7 @@ func TestProcessFeedScrapeBudget(t *testing.T) {
 			"Excerpt "+itoa(i),
 		))
 	}
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -282,7 +284,7 @@ func TestProcessFeedSkipsDuplicatesBeforeScrape(t *testing.T) {
 		testItem("Duplicate", "https://example.com/dup", "Excerpt"),
 		testItem("Fresh", "https://example.com/fresh", "Excerpt"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -304,7 +306,7 @@ func TestProcessFeedSummarizerGetsDeterminedContent(t *testing.T) {
 	feed := testFeed(
 		testItem("RSS Title", "https://example.com/a", "Short excerpt"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 	if got := sum.lastContent(); got != "FULL SCRAPED BODY" {
@@ -325,7 +327,7 @@ func TestProcessFeedLogsScrapedVsFallback(t *testing.T) {
 		testItem("A", "https://example.com/a", "Excerpt A"),
 		testItem("B", "https://example.com/b", "Excerpt B"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -346,7 +348,7 @@ func TestProcessFeedSkipsLowQualityContent(t *testing.T) {
 		testItem("Short", "https://example.com/short", "Too short"),
 		testItem("Long", "https://example.com/long", long),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -372,7 +374,7 @@ func TestProcessFeedQualityFilterDisabledWhenZero(t *testing.T) {
 	feed := testFeed(
 		testItem("Short", "https://example.com/short", "Tiny"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 	if got := len(f.news.(*fakeNewsStore).created); got != 1 {
@@ -392,7 +394,7 @@ func TestProcessFeedUsesScrapedImageWhenRSSHasNone(t *testing.T) {
 	feed := testFeed(
 		testItem("RSS Title", "https://example.com/a", "Excerpt A"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -418,7 +420,7 @@ func TestProcessFeedKeepsValidRSSImage(t *testing.T) {
 
 	src := f.sources.(*fakeSourceStore)
 	feed := testFeed(item)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -443,7 +445,7 @@ func TestProcessFeedReplacesInvalidRSSImage(t *testing.T) {
 
 	src := f.sources.(*fakeSourceStore)
 	feed := testFeed(item)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
@@ -462,13 +464,58 @@ func TestProcessFeedKeepsImageEmptyWhenScrapedHasNone(t *testing.T) {
 	feed := testFeed(
 		testItem("RSS Title", "https://example.com/a", "Excerpt A"),
 	)
-	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
 		t.Fatalf("processFeed: %v", err)
 	}
 
 	news := f.news.(*fakeNewsStore)
 	if got := news.created[0].ImageURL; got != "" {
 		t.Errorf("ImageURL = %q, want empty (no image in scraped content)", got)
+	}
+}
+
+func TestFetchAllAggregatesStats(t *testing.T) {
+	// Serve one RSS feed with two items from a local server so FetchAll can
+	// parse it without external network.
+	const feedXML = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+<title>Test</title>
+<item><title>First Story</title><link>https://example.com/first</link><description>Short excerpt one</description></item>
+<item><title>Second Story</title><link>https://example.com/second</link><description>Short excerpt two</description></item>
+</channel></rss>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/rss+xml")
+		io.WriteString(w, feedXML)
+	}))
+	defer srv.Close()
+
+	scraperImpl := &fakeScraper{
+		result:  &scraper.Article{Title: "Full Scraped Title", Content: "FULL SCRAPED BODY"},
+		failURL: "https://example.com/second",
+	}
+	f := newTestFetcher(scraperImpl, 20, nil)
+	store := f.sources.(*fakeSourceStore)
+	store.sources = []models.RSSSource{{ID: 1, Name: "Test Feed", Category: "ai", URL: srv.URL}}
+
+	stats, err := f.FetchAll(context.Background())
+	if err != nil {
+		t.Fatalf("FetchAll: %v", err)
+	}
+
+	if stats.TotalNew != 2 {
+		t.Errorf("TotalNew = %d, want 2", stats.TotalNew)
+	}
+	if stats.Scraped != 1 {
+		t.Errorf("Scraped = %d, want 1", stats.Scraped)
+	}
+	if stats.Fallback != 1 {
+		t.Errorf("Fallback = %d, want 1", stats.Fallback)
+	}
+	if len(stats.Sources) != 1 {
+		t.Fatalf("Sources len = %d, want 1", len(stats.Sources))
+	}
+	if stats.Sources[0].Name != "Test Feed" {
+		t.Errorf("Sources[0].Name = %q, want Test Feed", stats.Sources[0].Name)
 	}
 }
 

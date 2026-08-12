@@ -18,7 +18,6 @@ import (
 	"neuralwire/backend/internal/database"
 	"neuralwire/backend/internal/fetcher"
 	"neuralwire/backend/internal/repository"
-	"neuralwire/backend/internal/scheduler"
 	"neuralwire/backend/internal/scraper"
 )
 
@@ -75,15 +74,6 @@ func main() {
 		Logger:          logger,
 	})
 
-	sched := scheduler.New(scheduler.Options{
-		CronSchedule: cfg.CronSchedule,
-		Fetcher:      rssFetcher,
-		RunOnStartup: cfg.FetchOnStartup,
-		Logger:       logger,
-	})
-	sched.Start()
-	defer sched.Stop()
-
 	srv := api.NewServer(api.ServerOptions{
 		NewsRepo:     newsRepo,
 		CategoryRepo: categoryRepo,
@@ -91,6 +81,7 @@ func main() {
 		Auth:         authManager,
 		AdminUser:    cfg.AdminUsername,
 		AdminPass:    cfg.AdminPassword,
+		Fetcher:      rssFetcher,
 		Logger:       logger,
 	})
 
@@ -102,7 +93,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Printf("listening on %s (cron %q)", httpServer.Addr, cfg.CronSchedule)
+		logger.Printf("listening on %s", httpServer.Addr)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}

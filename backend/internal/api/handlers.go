@@ -1,12 +1,14 @@
 package api
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"neuralwire/backend/internal/models"
 )
@@ -228,6 +230,29 @@ func (s *Server) handleAdminGetNews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, news)
+}
+
+// handleFetchNews manually triggers one RSS fetch cycle and returns the
+// aggregate statistics. It is protected by requireAuth.
+func (s *Server) handleFetchNews(w http.ResponseWriter, r *http.Request) {
+	if s.fetcher == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "fetcher is not configured")
+		return
+	}
+
+	// Allow the full cycle to finish; individual scrapes are bounded by their
+	// own timeouts, and the request context is overridden so a client
+	// disconnect does not abort the fetch midway.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	stats, err := s.fetcher.FetchAll(ctx)
+	if err != nil {
+		s.logger.Printf("api: fetch cycle finished with errors: %v", err)
+		// Still report partial results; a per-source error is not a total
+		// failure of the manual trigger.
+	}
+	s.writeJSON(w, http.StatusOK, stats)
 }
 
 type createNewsRequest struct {

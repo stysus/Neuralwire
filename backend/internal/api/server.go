@@ -2,13 +2,21 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 
 	"neuralwire/backend/internal/auth"
+	"neuralwire/backend/internal/fetcher"
 	"neuralwire/backend/internal/repository"
 )
+
+// FeedFetcher runs one RSS fetch cycle. It is satisfied by *fetcher.Fetcher
+// and by test doubles.
+type FeedFetcher interface {
+	FetchAll(ctx context.Context) (fetcher.FetchStats, error)
+}
 
 // Server wires repositories and middleware into an http.Handler.
 type Server struct {
@@ -18,6 +26,7 @@ type Server struct {
 	auth         *auth.Manager
 	adminUser    string
 	adminPass    string
+	fetcher      FeedFetcher
 	logger       *log.Logger
 }
 
@@ -29,7 +38,10 @@ type ServerOptions struct {
 	Auth         *auth.Manager
 	AdminUser    string
 	AdminPass    string
-	Logger       *log.Logger
+	// Fetcher drives the manual POST /api/admin/fetch endpoint. When nil the
+	// endpoint responds 503.
+	Fetcher FeedFetcher
+	Logger  *log.Logger
 }
 
 // NewServer builds a Server.
@@ -50,6 +62,7 @@ func NewServer(opts ServerOptions) *Server {
 		auth:         opts.Auth,
 		adminUser:    opts.AdminUser,
 		adminPass:    opts.AdminPass,
+		fetcher:      opts.Fetcher,
 		logger:       opts.Logger,
 	}
 }
@@ -74,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	admin.HandleFunc("POST /api/admin/news/{id}/publish", s.handlePublishNews)
 	admin.HandleFunc("POST /api/admin/news/{id}/reject", s.handleRejectNews)
 	admin.HandleFunc("DELETE /api/admin/news/{id}", s.handleDeleteNews)
+	mux.Handle("POST /api/admin/fetch", s.requireAuth(http.HandlerFunc(s.handleFetchNews)))
 	mux.Handle("/api/admin/", s.requireAuth(admin))
 
 	return s.recover(s.log(s.cors(mux)))

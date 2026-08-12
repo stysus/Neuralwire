@@ -106,33 +106,60 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 	}
 }
 
+// SourceStats summarizes one fetch cycle for a single RSS source.
+type SourceStats struct {
+	Name              string `json:"name"`
+	Inserted          int    `json:"inserted"`
+	Scraped           int    `json:"scraped"`
+	Fallback          int    `json:"fallback"`
+	SkippedLowQuality int    `json:"skipped_low_quality"`
+	Error             string `json:"error,omitempty"`
+}
+
+// FetchStats aggregates the results of a full fetch cycle across sources.
+type FetchStats struct {
+	TotalNew          int           `json:"total_new"`
+	Scraped           int           `json:"scraped"`
+	Fallback          int           `json:"fallback"`
+	SkippedLowQuality int           `json:"skipped_low_quality"`
+	Sources           []SourceStats `json:"sources"`
+}
+
 // FetchAll polls every enabled source. Errors on individual sources are
-// logged and do not abort the remaining sources.
-func (f *Fetcher) FetchAll(ctx context.Context) error {
+// reported per source and do not abort the remaining sources.
+func (f *Fetcher) FetchAll(ctx context.Context) (FetchStats, error) {
+	stats := FetchStats{}
 	sources, err := f.sources.ListEnabled()
 	if err != nil {
-		return err
+		return stats, err
 	}
 	if len(sources) == 0 {
 		f.logger.Printf("fetcher: no enabled rss sources")
-		return nil
+		return stats, nil
 	}
 
 	f.logger.Printf("fetcher: fetching %d rss source(s)", len(sources))
 	var fetchErr error
 	for _, src := range sources {
-		if err := f.fetchSource(ctx, src); err != nil {
+		srcStats, err := f.fetchSource(ctx, src)
+		if err != nil {
 			fetchErr = errors.Join(fetchErr, err)
+			srcStats.Error = err.Error()
 			f.logger.Printf("fetcher: source %q failed: %v", src.Name, err)
 		}
+		stats.Sources = append(stats.Sources, srcStats)
+		stats.TotalNew += srcStats.Inserted
+		stats.Scraped += srcStats.Scraped
+		stats.Fallback += srcStats.Fallback
+		stats.SkippedLowQuality += srcStats.SkippedLowQuality
 	}
-	return fetchErr
+	return stats, fetchErr
 }
 
-func (f *Fetcher) fetchSource(ctx context.Context, src models.RSSSource) error {
+func (f *Fetcher) fetchSource(ctx context.Context, src models.RSSSource) (SourceStats, error) {
 	feed, err := f.parser.ParseURLWithContext(src.URL, ctx)
 	if err != nil {
-		return err
+		return SourceStats{Name: src.Name, Error: err.Error()}, err
 	}
 	return f.processFeed(ctx, src, feed)
 }
@@ -142,7 +169,9 @@ func (f *Fetcher) fetchSource(ctx context.Context, src models.RSSSource) error {
 // link; when scraping is unavailable, fails or the per-source budget is
 // exhausted, it falls back to the RSS excerpt. Articles whose final content
 // is below the quality threshold are skipped rather than stored as drafts.
-func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *gofeed.Feed) error {
+// It returns per-source statistics for the cycle.
+func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *gofeed.Feed) (SourceStats, error) {
+	stats := SourceStats{Name: src.Name}
 	inserted := 0
 	scraped := 0
 	fallback := 0
@@ -238,6 +267,11 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 		}
 	}
 
+	stats.Inserted = inserted
+	stats.Scraped = scraped
+	stats.Fallback = fallback
+	stats.SkippedLowQuality = skippedLowQuality
+
 	if err := f.sources.UpdateLastFetched(src.ID, time.Now()); err != nil {
 		f.logger.Printf("fetcher: update last_fetched for %q: %v", src.Name, err)
 	}
@@ -245,7 +279,7 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 		"fetcher: source %q inserted %d new draft(s) (scraped: %d, fallback: %d, skipped-low-quality: %d)",
 		src.Name, inserted, scraped, fallback, skippedLowQuality,
 	)
-	return nil
+	return stats, nil
 }
 
 // rssContent returns the richest excerpt the feed provides.

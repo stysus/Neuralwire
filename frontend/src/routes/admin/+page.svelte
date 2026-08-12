@@ -9,6 +9,71 @@
 	let errorMessage = $state('');
 	let serverTime = $state('');
 
+	let isScraping = $state(false);
+	let scrapeResult = $state<string | null>(null);
+	let scrapeError = $state<string | null>(null);
+	let lastFetchInfo = $state<{ time: string; result: string } | null>(null);
+
+	function loadLastFetch() {
+		const stored = localStorage.getItem('last_fetch_info');
+		if (stored) {
+			try {
+				lastFetchInfo = JSON.parse(stored);
+			} catch (e) {
+				console.error(e);
+			}
+		}
+	}
+
+	async function handleScrape() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+
+		isScraping = true;
+		scrapeResult = null;
+		scrapeError = null;
+
+		try {
+			const res = await fetch('http://localhost:8080/api/admin/fetch', {
+				method: 'POST',
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				const resultMessage = `Scraped ${data.total_new ?? 0} new, skipped ${data.skipped_low_quality ?? 0} low quality`;
+				scrapeResult = resultMessage;
+
+				const nowStr = new Date().toLocaleString('en-US', {
+					month: 'short',
+					day: 'numeric',
+					hour: '2-digit',
+					minute: '2-digit',
+					second: '2-digit'
+				});
+				lastFetchInfo = { time: nowStr, result: resultMessage };
+				localStorage.setItem('last_fetch_info', JSON.stringify(lastFetchInfo));
+
+				await fetchStats();
+			} else {
+				if (res.status === 401 || res.status === 403) {
+					localStorage.removeItem('admin_token');
+					window.location.reload();
+					return;
+				}
+				const data = await res.json().catch(() => ({}));
+				scrapeError = data.error || 'Scrape operation failed on the backend.';
+			}
+		} catch (err) {
+			console.error('Scrape request failed:', err);
+			scrapeError = 'Failed to communicate with the scraping node.';
+		} finally {
+			isScraping = false;
+		}
+	}
+
 	async function fetchStats() {
 		const token = localStorage.getItem('admin_token');
 		if (!token) return;
@@ -54,6 +119,7 @@
 
 	onMount(() => {
 		fetchStats();
+		loadLastFetch();
 		serverTime = new Date().toISOString();
 
 		// Update time telemetry
@@ -82,9 +148,27 @@
 			>
 			<h1 class="font-serif text-3xl font-medium text-white">TERMINAL CONTROL</h1>
 		</div>
-		<div class="space-y-0.5 text-right font-mono text-[10px] text-slate-500">
-			<div>SYS_TIME: <span class="text-slate-300">{serverTime}</span></div>
-			<div>API_STATUS: <span class="font-bold text-[#22D3EE]">ONLINE</span></div>
+		<div class="flex flex-col items-end gap-2 text-right">
+			<div class="space-y-0.5 font-mono text-[10px] text-slate-500">
+				<div>SYS_TIME: <span class="text-slate-300">{serverTime}</span></div>
+				<div>API_STATUS: <span class="font-bold text-[#22D3EE]">ONLINE</span></div>
+				{#if lastFetchInfo}
+					<div>LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span> <span class="text-slate-400">({lastFetchInfo.result})</span></div>
+				{/if}
+			</div>
+			<div>
+				<button
+					onclick={handleScrape}
+					disabled={isScraping}
+					class="cursor-pointer rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-3 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{#if isScraping}
+						[RUNNING_FETCH...]
+					{:else}
+						[RUN_FETCH()]
+					{/if}
+				</button>
+			</div>
 		</div>
 	</div>
 
@@ -131,6 +215,32 @@
 			</button>
 		</div>
 	{:else}
+		{#if scrapeResult}
+			<div class="mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 p-4 text-center font-mono text-xs relative">
+				<button 
+					onclick={() => (scrapeResult = null)} 
+					class="absolute top-2 right-3 text-slate-500 hover:text-[#22D3EE] cursor-pointer"
+				>
+					[X]
+				</button>
+				<div class="font-bold text-[#22D3EE] uppercase mb-1">// SCRAPE_CYCLE_SUCCESS</div>
+				<div class="text-slate-300">{scrapeResult}</div>
+			</div>
+		{/if}
+
+		{#if scrapeError}
+			<div class="mb-6 rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 p-4 text-center font-mono text-xs relative">
+				<button 
+					onclick={() => (scrapeError = null)} 
+					class="absolute top-2 right-3 text-slate-500 hover:text-[#E11D48] cursor-pointer"
+				>
+					[X]
+				</button>
+				<div class="font-bold text-[#E11D48] uppercase mb-1">// SCRAPE_CYCLE_FAILURE</div>
+				<div class="text-slate-400">{scrapeError}</div>
+			</div>
+		{/if}
+
 		<!-- Stats Grid -->
 		<div class="mb-12 grid grid-cols-1 gap-6 sm:grid-cols-3 lg:gap-8">
 			<!-- Drafts Card -->

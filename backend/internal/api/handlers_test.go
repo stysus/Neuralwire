@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
@@ -11,6 +12,7 @@ import (
 
 	"neuralwire/backend/internal/auth"
 	"neuralwire/backend/internal/database"
+	"neuralwire/backend/internal/fetcher"
 	"neuralwire/backend/internal/models"
 	"neuralwire/backend/internal/repository"
 )
@@ -449,4 +451,106 @@ func itoa(n int64) string {
 		n /= 10
 	}
 	return string(buf[pos:])
+}
+
+// fakeFeedFetcher is a test double for the manual fetch endpoint.
+type fakeFeedFetcher struct {
+	stats fetcher.FetchStats
+	err   error
+	calls int
+}
+
+func (f *fakeFeedFetcher) FetchAll(_ context.Context) (fetcher.FetchStats, error) {
+	f.calls++
+	return f.stats, f.err
+}
+
+func TestFetchEndpoint(t *testing.T) {
+	fake := &fakeFeedFetcher{stats: fetcher.FetchStats{
+		TotalNew:          3,
+		Scraped:           2,
+		Fallback:          1,
+		SkippedLowQuality: 10,
+		Sources: []fetcher.SourceStats{
+			{Name: "OpenAI Blog", Inserted: 2, Scraped: 2},
+			{Name: "Reddit r/artificial", Inserted: 1, Fallback: 1},
+		},
+	}}
+	s := newTestServer(t)
+	s.fetcher = fake
+	token := adminToken(t, s)
+
+	rec := doJSONAs(t, s, http.MethodPost, "/api/admin/fetch", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fetch status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	if fake.calls != 1 {
+		t.Errorf("FetchAll calls = %d, want 1", fake.calls)
+	}
+	var resp fetcher.FetchStats
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode fetch response: %v", err)
+	}
+	if resp.TotalNew != 3 || resp.Scraped != 2 || resp.Fallback != 1 || resp.SkippedLowQuality != 10 {
+		t.Errorf("fetch stats = %+v, want total_new=3 scraped=2 fallback=1 skipped=10", resp)
+	}
+	if len(resp.Sources) != 2 || resp.Sources[0].Name != "OpenAI Blog" {
+		t.Errorf("fetch sources = %+v, want 2 sources starting with OpenAI Blog", resp.Sources)
+	}
+}
+
+func TestFetchEndpointRequiresAuth(t *testing.T) {
+	s := newTestServer(t)
+	s.fetcher = &fakeFeedFetcher{}
+	// No token -> 401.
+	if rec := doJSON(t, s, http.MethodPost, "/api/admin/fetch", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("fetch without token = %d, want 401", rec.Code)
+	}
+}
+
+func TestFetchEndpointWithoutFetcher(t *testing.T) {
+	s := newTestServer(t) // no fetcher configured
+	token := adminToken(t, s)
+
+	rec := doJSONAs(t, s, http.MethodPost, "/api/admin/fetch", nil, token)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("fetch without fetcher = %d, want 503", rec.Code)
+	}
+}
+
+func TestAdminListStableOrdering(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	// Create three drafts in quick succession. created_at has second
+	// precision, so id DESC must break the tie deterministically.
+	var ids []int64
+	for i := 0; i < 3; i++ {
+		rec := doJSONAs(t, s, http.MethodPost, "/api/admin/news", map[string]any{
+			"title": "Stable order story " + itoa(int64(i)),
+			"url":   "https://example.com/stable/" + itoa(int64(i)),
+		}, token)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create %d status = %d", i, rec.Code)
+		}
+		ids = append(ids, decodeNews(t, rec).ID)
+	}
+
+	rec := doJSONAs(t, s, http.MethodGet, "/api/admin/news", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("admin list status = %d", rec.Code)
+	}
+	resp := decodeList(t, rec)
+	if len(resp.Data) != 3 {
+		t.Fatalf("admin list len = %d, want 3", len(resp.Data))
+	}
+	// Newest first: ids must be descending.
+	for i := 1; i < len(resp.Data); i++ {
+		if resp.Data[i].ID > resp.Data[i-1].ID {
+			t.Errorf("admin list not stable: id[%d]=%d > id[%d]=%d", i, resp.Data[i].ID, i-1, resp.Data[i-1].ID)
+		}
+	}
+	if resp.Data[0].ID != ids[2] {
+		t.Errorf("newest first id = %d, want %d", resp.Data[0].ID, ids[2])
+	}
 }
