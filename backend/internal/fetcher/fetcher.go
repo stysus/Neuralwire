@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mmcdole/gofeed"
 
@@ -39,6 +40,11 @@ type ContentScraper interface {
 // one fetch cycle.
 const defaultScrapeMax = 20
 
+// defaultMinContentChars is the minimum content length for a fetched article
+// to be kept as a draft. Shorter content (usually an RSS excerpt) is skipped
+// as low quality.
+const defaultMinContentChars = 500
+
 // FetcherOptions configures the fetcher.
 type FetcherOptions struct {
 	Sources    SourceStore
@@ -47,21 +53,26 @@ type FetcherOptions struct {
 	Scraper    ContentScraper
 	// ScrapeMax is the number of newest articles per source to attempt
 	// full-content scraping for (default 20). Zero uses the default.
-	ScrapeMax  int
-	HTTPClient *http.Client
-	Logger     *log.Logger
+	ScrapeMax int
+	// MinContentChars is the minimum content length for a fetched article to
+	// be kept as a draft (default 500). Zero uses the default; a negative
+	// value disables the quality filter.
+	MinContentChars int
+	HTTPClient      *http.Client
+	Logger          *log.Logger
 }
 
 // Fetcher polls RSS sources and stores new articles as drafts.
 type Fetcher struct {
-	sources    SourceStore
-	news       NewsStore
-	summarizer ai.Summarizer
-	scraper    ContentScraper
-	scrapeMax  int
-	client     *http.Client
-	parser     *gofeed.Parser
-	logger     *log.Logger
+	sources         SourceStore
+	news            NewsStore
+	summarizer      ai.Summarizer
+	scraper         ContentScraper
+	scrapeMax       int
+	minContentChars int
+	client          *http.Client
+	parser          *gofeed.Parser
+	logger          *log.Logger
 }
 
 // NewFetcher builds a Fetcher.
@@ -75,19 +86,23 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 	if opts.ScrapeMax <= 0 {
 		opts.ScrapeMax = defaultScrapeMax
 	}
+	if opts.MinContentChars == 0 {
+		opts.MinContentChars = defaultMinContentChars
+	}
 	parser := gofeed.NewParser()
 	parser.Client = opts.HTTPClient
 	parser.UserAgent = "Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.example)"
 
 	return &Fetcher{
-		sources:    opts.Sources,
-		news:       opts.News,
-		summarizer: opts.Summarizer,
-		scraper:    opts.Scraper,
-		scrapeMax:  opts.ScrapeMax,
-		client:     opts.HTTPClient,
-		parser:     parser,
-		logger:     opts.Logger,
+		sources:         opts.Sources,
+		news:            opts.News,
+		summarizer:      opts.Summarizer,
+		scraper:         opts.Scraper,
+		scrapeMax:       opts.ScrapeMax,
+		minContentChars: opts.MinContentChars,
+		client:          opts.HTTPClient,
+		parser:          parser,
+		logger:          opts.Logger,
 	}
 }
 
@@ -125,11 +140,13 @@ func (f *Fetcher) fetchSource(ctx context.Context, src models.RSSSource) error {
 // processFeed turns parsed feed items into draft articles. For each new
 // item it first tries to scrape the full article content from the item's
 // link; when scraping is unavailable, fails or the per-source budget is
-// exhausted, it falls back to the RSS excerpt.
+// exhausted, it falls back to the RSS excerpt. Articles whose final content
+// is below the quality threshold are skipped rather than stored as drafts.
 func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *gofeed.Feed) error {
 	inserted := 0
 	scraped := 0
 	fallback := 0
+	skippedLowQuality := 0
 	scrapeAttempts := 0
 
 	for _, item := range feed.Items {
@@ -159,6 +176,7 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 			article, scrapeErr := f.scraper.Scrape(ctx, link)
 			if scrapeErr == nil && article != nil && strings.TrimSpace(article.Content) != "" {
 				content = article.Content
+				// Prefer the scraped title when it is longer/more descriptive.
 				if better := preferTitle(title, article.Title); better != "" {
 					title = better
 				}
@@ -172,9 +190,30 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 			continue
 		}
 
+		// Quality gate: only keep drafts with a substantial article body.
+		// Short content means the scrape failed or hit the budget and the RSS
+		// excerpt alone is not enough for a complete news article.
+		if f.minContentChars > 0 && utf8.RuneCountInString(content) < f.minContentChars {
+			skippedLowQuality++
+			f.logger.Printf(
+				"fetcher: skipped %q (low quality, content %d chars < %d)",
+				link, utf8.RuneCountInString(content), f.minContentChars,
+			)
+			continue
+		}
+
 		// Summarize whatever content was determined (full scraped text when
 		// available, otherwise the RSS excerpt).
 		summary := f.summarizer.Summarize(ctx, title, content)
+
+		imageURL := firstImage(item)
+		if usedScrape && !validImageURL(imageURL) {
+			// The RSS feed did not provide a usable image; use the first
+			// image from the scraped content (already absolute).
+			if extracted := scraper.FirstImage(content); extracted != "" {
+				imageURL = extracted
+			}
+		}
 
 		article := models.News{
 			Title:    title,
@@ -183,7 +222,7 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 			Category: src.Category,
 			Summary:  summary,
 			Content:  content,
-			ImageURL: firstImage(item),
+			ImageURL: imageURL,
 			Status:   models.StatusDraft,
 		}
 
@@ -203,8 +242,8 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 		f.logger.Printf("fetcher: update last_fetched for %q: %v", src.Name, err)
 	}
 	f.logger.Printf(
-		"fetcher: source %q inserted %d new draft(s) (scraped: %d, fallback: %d)",
-		src.Name, inserted, scraped, fallback,
+		"fetcher: source %q inserted %d new draft(s) (scraped: %d, fallback: %d, skipped-low-quality: %d)",
+		src.Name, inserted, scraped, fallback, skippedLowQuality,
 	)
 	return nil
 }
@@ -256,4 +295,12 @@ func firstImage(item *gofeed.Item) string {
 		}
 	}
 	return ""
+}
+
+// validImageURL reports whether a URL is usable as an article image. Only
+// absolute http(s) URLs qualify; empty, relative or protocol-relative URLs
+// are treated as invalid so the scraper can supply a better one.
+func validImageURL(u string) bool {
+	u = strings.TrimSpace(u)
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
 }

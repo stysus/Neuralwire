@@ -69,9 +69,10 @@ func main() {
 			UserAgent: "Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.example)",
 			Logger:    logger,
 		}),
-		ScrapeMax:  cfg.ScrapeMaxPerSource,
-		HTTPClient: &http.Client{Timeout: 30 * time.Second},
-		Logger:     logger,
+		ScrapeMax:       cfg.ScrapeMaxPerSource,
+		MinContentChars: cfg.ScrapeMinContentChars,
+		HTTPClient:      &http.Client{Timeout: 30 * time.Second},
+		Logger:          logger,
 	})
 
 	sched := scheduler.New(scheduler.Options{

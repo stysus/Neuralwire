@@ -330,8 +330,145 @@ func TestProcessFeedLogsScrapedVsFallback(t *testing.T) {
 	}
 
 	line := buf.String()
-	if !strings.Contains(line, "inserted 2 new draft(s) (scraped: 1, fallback: 1)") {
+	if !strings.Contains(line, "inserted 2 new draft(s) (scraped: 1, fallback: 1, skipped-low-quality: 0)") {
 		t.Errorf("log line = %q, want scraped/fallback counts", strings.TrimSpace(line))
+	}
+}
+
+func TestProcessFeedSkipsLowQualityContent(t *testing.T) {
+	var buf bytes.Buffer
+	f := newTestFetcher(&fakeScraper{err: io.ErrUnexpectedEOF}, 20, &buf)
+	f.minContentChars = 50
+
+	src := f.sources.(*fakeSourceStore)
+	long := strings.Repeat("word ", 20) // 100 chars
+	feed := testFeed(
+		testItem("Short", "https://example.com/short", "Too short"),
+		testItem("Long", "https://example.com/long", long),
+	)
+	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+
+	news := f.news.(*fakeNewsStore)
+	if len(news.created) != 1 {
+		t.Fatalf("created %d articles, want 1 (short item skipped)", len(news.created))
+	}
+	if news.created[0].URL != "https://example.com/long" {
+		t.Errorf("created article URL = %q, want the long one", news.created[0].URL)
+	}
+	if !strings.Contains(buf.String(), `skipped "https://example.com/short" (low quality`) {
+		t.Errorf("log missing low-quality skip message:\n%s", buf.String())
+	}
+}
+
+func TestProcessFeedQualityFilterDisabledWhenZero(t *testing.T) {
+	// minContentChars == 0 means the quality filter is off (used by tests and
+	// when explicitly disabled), so short content is still stored.
+	f := newTestFetcher(nil, 20, nil)
+	f.minContentChars = 0
+
+	src := f.sources.(*fakeSourceStore)
+	feed := testFeed(
+		testItem("Short", "https://example.com/short", "Tiny"),
+	)
+	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+	if got := len(f.news.(*fakeNewsStore).created); got != 1 {
+		t.Errorf("created %d articles, want 1 (filter disabled)", got)
+	}
+}
+
+func TestProcessFeedUsesScrapedImageWhenRSSHasNone(t *testing.T) {
+	f := newTestFetcher(&fakeScraper{
+		result: &scraper.Article{
+			Title:   "Scraped Title",
+			Content: `<p>Full article body.</p><img src="https://cdn.example.com/hero.png" alt="Hero">`,
+		},
+	}, 20, nil)
+
+	src := f.sources.(*fakeSourceStore)
+	feed := testFeed(
+		testItem("RSS Title", "https://example.com/a", "Excerpt A"),
+	)
+	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+
+	news := f.news.(*fakeNewsStore)
+	if len(news.created) != 1 {
+		t.Fatalf("created %d articles, want 1", len(news.created))
+	}
+	if got := news.created[0].ImageURL; got != "https://cdn.example.com/hero.png" {
+		t.Errorf("ImageURL = %q, want first scraped image", got)
+	}
+}
+
+func TestProcessFeedKeepsValidRSSImage(t *testing.T) {
+	f := newTestFetcher(&fakeScraper{
+		result: &scraper.Article{
+			Title:   "Scraped Title",
+			Content: `<p>Full body.</p><img src="https://cdn.example.com/scraped.png">`,
+		},
+	}, 20, nil)
+
+	item := testItem("RSS Title", "https://example.com/a", "Excerpt A")
+	item.Image = &gofeed.Image{URL: "https://rss.example.com/cover.jpg"}
+
+	src := f.sources.(*fakeSourceStore)
+	feed := testFeed(item)
+	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+
+	news := f.news.(*fakeNewsStore)
+	if got := news.created[0].ImageURL; got != "https://rss.example.com/cover.jpg" {
+		t.Errorf("ImageURL = %q, want the RSS-provided image (kept)", got)
+	}
+}
+
+func TestProcessFeedReplacesInvalidRSSImage(t *testing.T) {
+	f := newTestFetcher(&fakeScraper{
+		result: &scraper.Article{
+			Title:   "Scraped Title",
+			Content: `<p>Full body.</p><img src="https://cdn.example.com/scraped.png">`,
+		},
+	}, 20, nil)
+
+	// A relative image URL from the RSS feed is invalid and must be replaced
+	// by the scraped absolute image.
+	item := testItem("RSS Title", "https://example.com/a", "Excerpt A")
+	item.Image = &gofeed.Image{URL: "/images/cover.jpg"}
+
+	src := f.sources.(*fakeSourceStore)
+	feed := testFeed(item)
+	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+
+	news := f.news.(*fakeNewsStore)
+	if got := news.created[0].ImageURL; got != "https://cdn.example.com/scraped.png" {
+		t.Errorf("ImageURL = %q, want scraped image replacing invalid RSS one", got)
+	}
+}
+
+func TestProcessFeedKeepsImageEmptyWhenScrapedHasNone(t *testing.T) {
+	f := newTestFetcher(&fakeScraper{
+		result: &scraper.Article{Title: "Scraped Title", Content: "<p>Full body with no images.</p>"},
+	}, 20, nil)
+
+	src := f.sources.(*fakeSourceStore)
+	feed := testFeed(
+		testItem("RSS Title", "https://example.com/a", "Excerpt A"),
+	)
+	if err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+
+	news := f.news.(*fakeNewsStore)
+	if got := news.created[0].ImageURL; got != "" {
+		t.Errorf("ImageURL = %q, want empty (no image in scraped content)", got)
 	}
 }
 

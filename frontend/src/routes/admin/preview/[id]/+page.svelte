@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { PageData } from './$types';
+	import Image from '$lib/Image.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -237,13 +238,16 @@
 			</p>
 
 			<!-- Image -->
-			{#if article.image_url}
-				<div
-					class="relative mb-8 aspect-[16/9] w-full overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]"
-				>
-					<img src={article.image_url} alt={article.title} class="h-full w-full object-cover" />
-				</div>
-			{/if}
+			<div
+				class="relative mb-8 aspect-[16/9] w-full overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]"
+			>
+				<Image
+					src={article.image_url}
+					content={article.content}
+					alt={article.title}
+					class="h-full w-full object-cover"
+				/>
+			</div>
 
 			<!-- Content -->
 			<div

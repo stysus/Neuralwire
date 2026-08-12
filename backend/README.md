@@ -38,8 +38,9 @@ go build -o bin/server ./cmd/server
 ```
 
 The server listens on `http://localhost:8080` and creates `data/neuralwire.db`
-on first run. On boot it runs an initial RSS fetch and then polls every
-6 hours.
+on first run. It polls feeds on the cron schedule every 6 hours;
+`FETCH_ON_STARTUP` defaults to **false**, so restarting the server does not
+re-fetch feeds (set it to `true` explicitly if you want a fetch on boot).
 
 ## Environment variables
 
@@ -53,9 +54,10 @@ on first run. On boot it runs an initial RSS fetch and then polls every
 | `AI_SUMMARY_MODEL`   | `gpt-4o-mini`                 | Model used for summaries                             |
 | `AI_SUMMARY_BASE_URL`| `https://api.openai.com/v1`   | OpenAI-compatible API base URL                       |
 | `CRON_SCHEDULE`      | `0 */6 * * *`                 | Cron expression for the RSS fetcher                  |
-| `FETCH_ON_STARTUP`   | `true`                        | Run one fetch cycle when the server boots            |
+| `FETCH_ON_STARTUP`   | `false`                       | Run one fetch cycle when the server boots (default off to avoid draft floods on restart) |
 | `SCRAPE_MAX_PER_SOURCE` | `20`                       | Newest articles scraped per source per cycle         |
 | `SCRAPE_TIMEOUT_SECONDS` | `15`                      | Per-article scrape timeout (seconds)                 |
+| `SCRAPE_MIN_CONTENT_CHARS` | `500`                    | Minimum content length for a fetched draft; shorter articles are skipped as low quality |
 | `ADMIN_USERNAME`     | `admin`                       | Admin login username                                 |
 | `ADMIN_PASSWORD`     | `admin123`                    | Admin login password. **Change it outside development** |
 | `ADMIN_TOKEN_SECRET` | dev value (see `.env.example`) | HMAC secret signing admin bearer tokens. **Change it outside development** |
@@ -78,11 +80,18 @@ extraction for each new article:
    URLs are rewritten to absolute against the final (post-redirect) URL,
    and leftover template placeholders such as `[[duration]]` are removed.
 3. If scraping succeeds, the scraped HTML becomes the article `content` (and
-   a better scraped title replaces the RSS title). The AI summarizer then
-   summarizes the **full** scraped content.
+   a better scraped title replaces the RSS title when it is longer/more
+   descriptive). The AI summarizer then summarizes the **full** scraped
+   content.
 4. If scraping fails, times out (`SCRAPE_TIMEOUT_SECONDS`, default 15s) or
    the budget is exceeded, the article falls back to the RSS excerpt
    (`item.Content` / `item.Description`).
+5. **Quality gate:** articles whose final content is shorter than
+   `SCRAPE_MIN_CONTENT_CHARS` (default 500) are **not** stored as drafts;
+   they are logged as `skipped (low quality)`.
+6. **Image extraction:** if the RSS feed provided no usable image, the first
+   `<img>` from the scraped HTML (already absolute) becomes `image_url`. No
+   images are generated or replaced — the original scraped media is used.
 
 The per-source log line reports the split, e.g.
 `fetcher: source "Google AI Blog" inserted 20 new draft(s) (scraped: 18, fallback: 2)`.

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import type { News } from '$lib/mockData';
+	import Image from '$lib/Image.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -110,23 +111,12 @@
 		<div
 			class="relative mb-12 aspect-[16/9] w-full overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]"
 		>
-			{#if article.image_url}
-				<img
-					src={article.image_url}
-					alt={article.title}
-					class="h-full w-full object-cover opacity-90 grayscale"
-				/>
-			{:else}
-				<div
-					class="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0F172A] to-[#1E293B]"
-				>
-					<div class="bg-grid-pattern absolute inset-0 opacity-15"></div>
-					<div class="absolute h-48 w-48 rounded-full bg-[#22D3EE]/5 blur-3xl"></div>
-					<span class="font-mono text-xs tracking-widest text-[#22D3EE]/40 uppercase"
-						>NEURALWIRE IMAGING</span
-					>
-				</div>
-			{/if}
+			<Image
+				src={article.image_url}
+				content={article.content}
+				alt={article.title}
+				class="h-full w-full object-cover opacity-90 grayscale"
+			/>
 			<div
 				class="absolute bottom-4 left-4 rounded-lg border border-[rgba(255,255,255,0.05)] bg-[#0A0E17]/80 px-3 py-1.5 font-mono text-[10px] text-slate-400 backdrop-blur-sm"
 			>
@@ -261,23 +251,12 @@
 								href="/{post.slug}"
 								class="relative block aspect-[16/10] w-full overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#0A0E17]"
 							>
-								{#if post.image_url}
-									<img
-										src={post.image_url}
-										alt={post.title}
-										class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
-										loading="lazy"
-									/>
-								{:else}
-									<div
-										class="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0A0E17] to-[#0F172A]"
-									>
-										<div class="bg-grid-pattern absolute inset-0 opacity-10"></div>
-										<span class="font-mono text-[8px] tracking-widest text-[#22D3EE]/35 uppercase"
-											>NW REC</span
-										>
-									</div>
-								{/if}
+								<Image
+									src={post.image_url}
+									content={post.content}
+									alt={post.title}
+									class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+								/>
 							</a>
 
 							<div class="flex flex-grow flex-col space-y-2 p-4">

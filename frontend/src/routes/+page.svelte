@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import type { News } from '$lib/mockData';
+	import Image from '$lib/Image.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -137,24 +138,12 @@
 					<div
 						class="relative aspect-[4/3] w-full scale-[0.99] overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A] transition-all duration-500 group-hover:scale-100"
 					>
-						{#if featuredArticle.image_url}
-							<img
-								src={featuredArticle.image_url}
-								alt={featuredArticle.title}
-								class="h-full w-full object-cover opacity-90 grayscale transition-all duration-700 group-hover:opacity-100 group-hover:grayscale-0"
-							/>
-						{:else}
-							<!-- Cyber pattern fallback -->
-							<div
-								class="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0F172A] to-[#1E293B]"
-							>
-								<div class="bg-grid-pattern absolute inset-0 opacity-15"></div>
-								<div class="absolute h-48 w-48 rounded-full bg-[#22D3EE]/5 blur-3xl"></div>
-								<span class="font-mono text-xs tracking-widest text-[#22D3EE]/40 uppercase"
-									>NEURALWIRE IMAGING</span
-								>
-							</div>
-						{/if}
+						<Image
+							src={featuredArticle.image_url}
+							content={featuredArticle.content}
+							alt={featuredArticle.title}
+							class="h-full w-full object-cover opacity-90 grayscale transition-all duration-700 group-hover:opacity-100 group-hover:grayscale-0"
+						/>
 						<div
 							class="absolute inset-0 bg-gradient-to-t from-[#0A0E17] via-transparent to-transparent opacity-40"
 						></div>
@@ -206,24 +195,12 @@
 						href="/{post.slug}"
 						class="relative block aspect-[16/10] w-full overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#0A0E17]"
 					>
-						{#if post.image_url}
-							<img
-								src={post.image_url}
-								alt={post.title}
-								class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
-								loading="lazy"
-							/>
-						{:else}
-							<div
-								class="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0A0E17] to-[#0F172A]"
-							>
-								<div class="bg-grid-pattern absolute inset-0 opacity-10"></div>
-								<div class="absolute h-24 w-24 rounded-full bg-[#22D3EE]/3 blur-2xl"></div>
-								<span class="font-mono text-[9px] tracking-widest text-[#22D3EE]/35 uppercase"
-									>NW PROTOCOL</span
-								>
-							</div>
-						{/if}
+						<Image
+							src={post.image_url}
+							content={post.content}
+							alt={post.title}
+							class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+						/>
 						<div class="absolute bottom-2 left-2">
 							<span
 								class="tag-mono rounded border border-[#22D3EE]/30 bg-[#0A0E17]/90 px-2 py-0.5 text-[10px] font-bold text-[#22D3EE] backdrop-blur-sm"

@@ -268,6 +268,28 @@ func isPlaceholderOnly(s string) bool {
 	return strings.TrimSpace(stripped) == ""
 }
 
+// FirstImage returns the src of the first <img> in an HTML fragment, or an
+// empty string when the fragment contains no images. The scraped content is
+// expected to already have absolute media URLs (renderArticleHTML rewrites
+// them), so the returned URL is ready to store in news.image_url.
+func FirstImage(content string) string {
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(content))
+	if err != nil {
+		return ""
+	}
+	img := doc.Find("img").First()
+	if img.Length() == 0 {
+		return ""
+	}
+	if src := strings.TrimSpace(img.AttrOr("src", "")); src != "" {
+		return src
+	}
+	if src := strings.TrimSpace(img.AttrOr("data-src", "")); src != "" {
+		return src
+	}
+	return ""
+}
+
 // resolveURL resolves ref against base. It returns data/blob/mailto/
 // javascript/tel URIs untouched, and handles protocol-relative URLs.
 func resolveURL(base *url.URL, ref string) (string, error) {

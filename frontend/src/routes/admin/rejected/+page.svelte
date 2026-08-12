@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page as pageStore } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import Image from '$lib/Image.svelte';
 
 	let currentPage = $derived(Number($pageStore.url.searchParams.get('page')) || 1);
 	const pageSize = 10;
@@ -165,25 +166,39 @@
 					class="group glow-hover relative flex flex-col justify-between gap-6 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/20 p-6 md:flex-row"
 				>
 					<!-- Article Info -->
-					<div class="flex-grow space-y-3">
-						<div class="flex items-center space-x-3 font-mono text-[10px] text-slate-500">
-							<span
-								class="rounded border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-1.5 py-0.5 font-bold text-[#22D3EE] uppercase"
-								>{item.category}</span
-							>
-							<span>•</span>
-							<span>{item.source.toUpperCase()}</span>
-							<span>•</span>
-							<span>REJECTED: {formatDate(item.created_at)}</span>
-						</div>
-						<h3
-							class="font-serif text-lg leading-snug font-normal text-white transition-colors group-hover:text-[#22D3EE]"
+					<div class="flex flex-grow items-start gap-4">
+						<!-- Thumbnail preview -->
+						<div
+							class="relative h-16 w-20 flex-shrink-0 overflow-hidden rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0A0E17] sm:h-20 sm:w-28"
 						>
-							{item.title}
-						</h3>
-						<p class="max-w-4xl font-sans text-xs leading-relaxed font-light text-slate-400">
-							{item.summary}
-						</p>
+							<Image
+								src={item.image_url}
+								content={item.content}
+								alt={item.title}
+								class="h-full w-full object-cover opacity-75 grayscale transition-all duration-300 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+							/>
+						</div>
+
+						<div class="flex-grow space-y-3">
+							<div class="flex items-center space-x-3 font-mono text-[10px] text-slate-500">
+								<span
+									class="rounded border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-1.5 py-0.5 font-bold text-[#22D3EE] uppercase"
+									>{item.category}</span
+								>
+								<span>•</span>
+								<span>{item.source.toUpperCase()}</span>
+								<span>•</span>
+								<span>REJECTED: {formatDate(item.created_at)}</span>
+							</div>
+							<h3
+								class="font-serif text-lg leading-snug font-normal text-white transition-colors group-hover:text-[#22D3EE]"
+							>
+								{item.title}
+							</h3>
+							<p class="max-w-4xl font-sans text-xs leading-relaxed font-light text-slate-400">
+								{item.summary}
+							</p>
+						</div>
 					</div>
 
 					<!-- Actions Panel -->

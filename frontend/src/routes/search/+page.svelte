@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import type { News } from '$lib/mockData';
 	import { goto } from '$app/navigation';
+	import Image from '$lib/Image.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -105,24 +106,12 @@
 						href="/{post.slug}"
 						class="relative block aspect-[16/10] w-full overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#0A0E17]"
 					>
-						{#if post.image_url}
-							<img
-								src={post.image_url}
-								alt={post.title}
-								class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
-								loading="lazy"
-							/>
-						{:else}
-							<div
-								class="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-[#0A0E17] to-[#0F172A]"
-							>
-								<div class="bg-grid-pattern absolute inset-0 opacity-10"></div>
-								<div class="absolute h-24 w-24 rounded-full bg-[#22D3EE]/3 blur-2xl"></div>
-								<span class="font-mono text-[9px] tracking-widest text-[#22D3EE]/35 uppercase"
-									>NW PROTOCOL</span
-								>
-							</div>
-						{/if}
+						<Image
+							src={post.image_url}
+							content={post.content}
+							alt={post.title}
+							class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+						/>
 					</a>
 
 					<!-- Card Body -->

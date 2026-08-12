@@ -40,6 +40,9 @@ type Config struct {
 	ScrapeMaxPerSource int
 	// ScrapeTimeout bounds each full-content scrape attempt.
 	ScrapeTimeout time.Duration
+	// ScrapeMinContentChars is the minimum content length for a fetched
+	// article to be kept as a draft; shorter content is skipped.
+	ScrapeMinContentChars int
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -49,7 +52,7 @@ type Config struct {
 func Load() (Config, error) {
 	loadDotEnv(".env")
 
-	fetchOnStartup, err := getenvBool("FETCH_ON_STARTUP", true)
+	fetchOnStartup, err := getenvBool("FETCH_ON_STARTUP", false)
 	if err != nil {
 		return Config{}, err
 	}
@@ -68,22 +71,27 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	scrapeMinContent, err := getenvInt("SCRAPE_MIN_CONTENT_CHARS", 500)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
-		Port:               getenv("PORT", "8080"),
-		DatabasePath:       getenv("DB_PATH", "data/neuralwire.db"),
-		CORSAllowOrigins:   getenvList("CORS_ALLOW_ORIGIN", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),
-		AISummaryAPIKey:    os.Getenv("AI_SUMMARY_API_KEY"),
-		AISummaryModel:     model,
-		AISummaryBaseURL:   baseURL,
-		AISummaryProvider:  getenv("AI_SUMMARY_PROVIDER", ""),
-		CronSchedule:       getenv("CRON_SCHEDULE", "0 */6 * * *"),
-		FetchOnStartup:     fetchOnStartup,
-		AdminUsername:      getenv("ADMIN_USERNAME", "admin"),
-		AdminPassword:      getenv("ADMIN_PASSWORD", "admin123"),
-		AdminTokenSecret:   getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
-		ScrapeMaxPerSource: scrapeMax,
-		ScrapeTimeout:      time.Duration(scrapeTimeoutSec) * time.Second,
+		Port:                  getenv("PORT", "8080"),
+		DatabasePath:          getenv("DB_PATH", "data/neuralwire.db"),
+		CORSAllowOrigins:      getenvList("CORS_ALLOW_ORIGIN", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),
+		AISummaryAPIKey:       os.Getenv("AI_SUMMARY_API_KEY"),
+		AISummaryModel:        model,
+		AISummaryBaseURL:      baseURL,
+		AISummaryProvider:     getenv("AI_SUMMARY_PROVIDER", ""),
+		CronSchedule:          getenv("CRON_SCHEDULE", "0 */6 * * *"),
+		FetchOnStartup:        fetchOnStartup,
+		AdminUsername:         getenv("ADMIN_USERNAME", "admin"),
+		AdminPassword:         getenv("ADMIN_PASSWORD", "admin123"),
+		AdminTokenSecret:      getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
+		ScrapeMaxPerSource:    scrapeMax,
+		ScrapeTimeout:         time.Duration(scrapeTimeoutSec) * time.Second,
+		ScrapeMinContentChars: scrapeMinContent,
 	}, nil
 }
 

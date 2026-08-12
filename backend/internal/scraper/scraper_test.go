@@ -280,3 +280,49 @@ func TestIsPlaceholderOnly(t *testing.T) {
 		t.Error("isPlaceholderOnly(empty) = true, want false")
 	}
 }
+
+func TestFirstImage(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{
+			name:    "first image src",
+			content: `<p>Intro</p><img src="https://cdn.example.com/a.png"><img src="https://cdn.example.com/b.png">`,
+			want:    "https://cdn.example.com/a.png",
+		},
+		{
+			name:    "data-src fallback",
+			content: `<p>Intro</p><img data-src="https://cdn.example.com/lazy.png" class="lazy">`,
+			want:    "https://cdn.example.com/lazy.png",
+		},
+		{
+			name:    "empty src uses data-src",
+			content: `<img src="" data-src="https://cdn.example.com/ds.png">`,
+			want:    "https://cdn.example.com/ds.png",
+		},
+		{
+			name:    "no images",
+			content: `<p>Just text, no media.</p>`,
+			want:    "",
+		},
+		{
+			name:    "malformed html",
+			content: `<p>unclosed`,
+			want:    "",
+		},
+		{
+			name:    "empty content",
+			content: "",
+			want:    "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FirstImage(tt.content); got != tt.want {
+				t.Errorf("FirstImage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
