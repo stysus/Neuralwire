@@ -2,6 +2,7 @@
 package config
 
 import (
+	"bufio"
 	"os"
 	"strconv"
 	"strings"
@@ -29,8 +30,13 @@ type Config struct {
 	FetchOnStartup bool
 }
 
-// Load builds a Config from the environment, applying defaults.
+// Load builds a Config from the environment, applying defaults. It first
+// loads a .env file from the current working directory (without overriding
+// variables already present in the process environment), then reads the
+// environment.
 func Load() (Config, error) {
+	loadDotEnv(".env")
+
 	fetchOnStartup, err := getenvBool("FETCH_ON_STARTUP", true)
 	if err != nil {
 		return Config{}, err
@@ -143,4 +149,44 @@ func getenvList(key string, fallback []string) []string {
 		return fallback
 	}
 	return out
+}
+
+// loadDotEnv reads a simple KEY=VALUE dot-env file and exports the variables
+// that are not already set in the process environment. Lines starting with
+// '#' are comments; inline '#' after the value is ignored. Values may be
+// wrapped in single or double quotes. Missing or unreadable files are
+// silently ignored so the app still runs without a .env.
+func loadDotEnv(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if i := strings.Index(value, " #"); i >= 0 {
+			value = strings.TrimSpace(value[:i])
+		}
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') ||
+				(value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+		if key == "" || os.Getenv(key) != "" {
+			continue
+		}
+		os.Setenv(key, value)
+	}
 }
