@@ -44,6 +44,7 @@ on first run. On boot it runs an initial RSS fetch and then polls every
 | `DB_PATH`            | `data/neuralwire.db`          | SQLite database file path                            |
 | `CORS_ALLOW_ORIGIN`  | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated allowed frontend origins |
 | `AI_SUMMARY_API_KEY` | *(empty)*                     | API key for the OpenAI-compatible summary endpoint   |
+| `AI_SUMMARY_PROVIDER`| `openai`                      | Preset: `openai`, `gemini`, `openrouter`, `groq`, `ollama` |
 | `AI_SUMMARY_MODEL`   | `gpt-4o-mini`                 | Model used for summaries                             |
 | `AI_SUMMARY_BASE_URL`| `https://api.openai.com/v1`   | OpenAI-compatible API base URL                       |
 | `CRON_SCHEDULE`      | `0 */6 * * *`                 | Cron expression for the RSS fetcher                  |
