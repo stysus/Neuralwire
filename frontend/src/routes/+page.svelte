@@ -11,6 +11,13 @@
 	let activeCategory = $state('all');
 	let heroIndex = $state(0);
 	let isHeroPaused = $state(false);
+	let visibleCount = $state(15);
+
+	$effect(() => {
+		if (activeCategory) {
+			visibleCount = 15;
+		}
+	});
 
 	// Compute filtered news for the feed grid
 	const articles = $derived(data.news as News[]);
@@ -23,6 +30,8 @@
 			? feedArticles
 			: feedArticles.filter((item) => item.category === activeCategory)
 	);
+
+	const visibleFeed = $derived(filteredFeed.slice(0, visibleCount));
 
 	const categories = $derived([
 		{ name: 'All News', slug: 'all' },
@@ -109,9 +118,12 @@
 								{getCategoryName(featuredArticle.category)}
 							</a>
 							<span class="font-mono text-slate-500">•</span>
-							<span class="font-mono text-slate-400">{formatDate(featuredArticle.published_at)}</span>
+							<span class="font-mono text-slate-400"
+								>{formatDate(featuredArticle.published_at)}</span
+							>
 							<span class="font-mono text-slate-500">•</span>
-							<span class="font-mono text-slate-400">{getReadingTime(featuredArticle.summary)}</span>
+							<span class="font-mono text-slate-400">{getReadingTime(featuredArticle.summary)}</span
+							>
 						</div>
 
 						<!-- Hero Headline -->
@@ -246,7 +258,10 @@
 							{/each}
 						</div>
 						<div class="font-mono text-[10px] tracking-widest text-slate-500">
-							{String(heroIndex + 1).padStart(2, '0')} / {String(heroArticles.length).padStart(2, '0')}
+							{String(heroIndex + 1).padStart(2, '0')} / {String(heroArticles.length).padStart(
+								2,
+								'0'
+							)}
 						</div>
 					</div>
 				</div>
@@ -287,9 +302,9 @@
 	</div>
 
 	<!-- News Grid -->
-	{#if filteredFeed.length > 0}
+	{#if visibleFeed.length > 0}
 		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8 2xl:grid-cols-5">
-			{#each filteredFeed as post}
+			{#each visibleFeed as post}
 				<article
 					class="group glow-hover flex flex-col overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/25"
 				>
@@ -360,6 +375,17 @@
 				</article>
 			{/each}
 		</div>
+
+		{#if filteredFeed.length > visibleCount}
+			<div class="mt-12 flex justify-center">
+				<button
+					onclick={() => (visibleCount += 15)}
+					class="cursor-pointer rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-8 py-3 font-mono text-xs font-bold tracking-widest text-[#22D3EE] uppercase transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white"
+				>
+					Load More
+				</button>
+			</div>
+		{/if}
 	{:else}
 		<!-- Empty State -->
 		<div
