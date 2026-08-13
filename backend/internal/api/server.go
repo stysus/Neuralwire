@@ -45,6 +45,9 @@ type Server struct {
 	// loginLimiter is a per-IP rate limit for POST /api/admin/login to slow
 	// brute-force password attempts. Nil disables limiting.
 	loginLimiter *ratelimit.Limiter
+	// globalLimiter is a per-IP rate limit for every request (anti-scan /
+	// anti-bot). Nil disables limiting.
+	globalLimiter *ratelimit.Limiter
 	// trustProxy enables trusting X-Forwarded-For for client IP resolution.
 	trustProxy bool
 	// trendingCache memoizes trending results per window for a few minutes so
@@ -78,7 +81,11 @@ type ServerOptions struct {
 	// (default 5 per minute when >0). <=0 disables login limiting.
 	LoginRateLimit  int
 	LoginRateWindow time.Duration
-	Logger          *log.Logger
+	// GlobalRateLimit is the max requests per IP per window applied to every
+	// request (default 120 per minute when >0). <=0 disables global limiting.
+	GlobalRateLimit  int
+	GlobalRateWindow time.Duration
+	Logger           *log.Logger
 }
 
 // NewServer builds a Server.
@@ -118,6 +125,13 @@ func NewServer(opts ServerOptions) *Server {
 		srv.loginLimiter = ratelimit.New(opts.LoginRateLimit, opts.LoginRateWindow)
 		srv.loginLimiter.Start()
 	}
+	if opts.GlobalRateLimit > 0 {
+		if opts.GlobalRateWindow <= 0 {
+			opts.GlobalRateWindow = time.Minute
+		}
+		srv.globalLimiter = ratelimit.New(opts.GlobalRateLimit, opts.GlobalRateWindow)
+		srv.globalLimiter.Start()
+	}
 	if opts.TrendingCacheTTL > 0 {
 		srv.trendingCache = cache.New(opts.TrendingCacheTTL)
 		srv.trendingCache.Start()
@@ -150,14 +164,14 @@ func (s *Server) Handler() http.Handler {
 	admin.HandleFunc("POST /api/admin/news/{id}/reject", s.handleRejectNews)
 	admin.HandleFunc("DELETE /api/admin/news/{id}", s.handleDeleteNews)
 	admin.HandleFunc("DELETE /api/admin/news", s.handleDeleteNewsByStatus)
-	mux.Handle("POST /api/admin/fetch", s.requireAuth(http.HandlerFunc(s.handleFetchNews)))
-	mux.Handle("POST /api/admin/fetch/cancel", s.requireAuth(http.HandlerFunc(s.handleCancelFetch)))
+	mux.Handle("POST /api/admin/fetch", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleFetchNews))))
+	mux.Handle("POST /api/admin/fetch/cancel", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleCancelFetch))))
 	mux.Handle("GET /api/admin/fetch/progress", s.requireAuth(http.HandlerFunc(s.handleFetchProgress)))
 	mux.Handle("GET /api/admin/settings", s.requireAuth(http.HandlerFunc(s.handleGetSettings)))
-	mux.Handle("PUT /api/admin/settings", s.requireAuth(http.HandlerFunc(s.handleUpdateSettings)))
-	mux.Handle("/api/admin/", s.requireAuth(admin))
+	mux.Handle("PUT /api/admin/settings", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUpdateSettings))))
+	mux.Handle("/api/admin/", s.requireAuth(s.csrfProtect(admin)))
 
-	return s.recover(s.securityHeaders(s.log(s.cors(mux))))
+	return s.recover(s.rateLimit(s.securityHeaders(s.log(s.cors(mux)))))
 }
 
 // --- response helpers -----------------------------------------------------

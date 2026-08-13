@@ -1087,3 +1087,86 @@ func TestValidCredentials(t *testing.T) {
 		}
 	}
 }
+
+func TestGlobalRateLimit(t *testing.T) {
+	db, err := database.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := database.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	s := NewServer(ServerOptions{
+		NewsRepo:         repository.NewNewsRepository(db),
+		CategoryRepo:     repository.NewCategoryRepository(db),
+		SettingsRepo:     repository.NewSettingsRepository(db),
+		GlobalRateLimit:  3, // allow 3 requests per IP
+		Auth:             auth.NewManager("test-secret", 0),
+		AdminUser:        testAdminUser,
+		AdminPass:        testAdminPass,
+		Logger:           log.New(io.Discard, "", 0),
+	})
+
+	h := s.Handler()
+	do := func() int {
+		req := httptest.NewRequest(http.MethodGet, "/api/news", nil)
+		req.RemoteAddr = "203.0.113.55:12345"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// First 3 requests pass.
+	for i := 0; i < 3; i++ {
+		if code := do(); code != http.StatusOK {
+			t.Fatalf("request %d = %d, want 200", i+1, code)
+		}
+	}
+	// 4th should be 429.
+	if code := do(); code != http.StatusTooManyRequests {
+		t.Errorf("request 4 = %d, want 429 (global rate limited)", code)
+	}
+}
+
+
+func TestCSRFProtect(t *testing.T) {
+	s := newTestServer(t) // allowOrigins includes localhost:5173
+	token := adminToken(t, s)
+	h := s.Handler()
+
+	// Helper: POST to create article with optional Origin.
+	doPost := func(origin string) int {
+		body := []byte(`{"title":"CSRF `+origin+`","url":"https://example.com/x","category":"ai"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/admin/news", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+
+	// No Origin (curl-like) -> passes CSRF (created).
+	if code := doPost(""); code != http.StatusCreated {
+		req := httptest.NewRequest(http.MethodPost, "/api/admin/news",
+			bytes.NewReader([]byte(`{"title":"CSRF x","url":"https://example.com/x","category":"ai"}`)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		t.Logf("no-origin status=%d body=%s", rec.Code, rec.Body.String())
+		t.Errorf("no-origin POST = %d, want 201", code)
+	}
+	// Allowed origin -> passes CSRF.
+	if code := doPost("http://localhost:5173"); code == http.StatusForbidden {
+		t.Error("allowed-origin POST should not be rejected by CSRF")
+	}
+	// Hostile origin -> 403.
+	if code := doPost("https://evil.com"); code != http.StatusForbidden {
+		t.Errorf("hostile-origin POST = %d, want 403", code)
+	}
+}
+

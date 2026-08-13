@@ -75,6 +75,9 @@ type Config struct {
 	// LoginRateLimit is the max login attempts per IP per minute
 	// (default 5). <=0 disables login rate limiting.
 	LoginRateLimit int
+	// GlobalRateLimit is the max requests per IP per minute applied to every
+	// request (default 120). <=0 disables global rate limiting.
+	GlobalRateLimit int
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -126,6 +129,10 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	globalRateLimit, err := getenvInt("GLOBAL_RATE_LIMIT", 120)
+	if err != nil {
+		return Config{}, err
+	}
 
 	imgGenEnabled := parseOptionalBool(os.Getenv("AI_IMAGE_GENERATION_ENABLED"))
 	trustProxy := parseOptionalBool(os.Getenv("TRUST_PROXY"))
@@ -154,6 +161,7 @@ func Load() (Config, error) {
 		ViewRateLimit:            viewRateLimit,
 		TrendingCacheTTLSeconds:  trendingCacheTTL,
 		LoginRateLimit:           loginRateLimit,
+		GlobalRateLimit:          globalRateLimit,
 	}, nil
 }
 

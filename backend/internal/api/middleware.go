@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -32,6 +33,27 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 
 		ctx := context.WithValue(r.Context(), ctxUsername, username)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+// csrfProtect defends the admin API against cross-site request forgery.
+// Browsers automatically attach the Origin header on state-changing requests
+// (POST/PUT/DELETE); we require it to be an allowed origin. Non-browser
+// clients (curl, servers) typically send no Origin header and are allowed,
+// since the bearer token itself already gates access. This is defense-in-depth
+// on top of the token (which browsers do not auto-send on cross-origin
+// requests).
+func (s *Server) csrfProtect(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodDelete {
+			origin := r.Header.Get("Origin")
+			// No Origin => non-browser client (curl, server-to-server). Allow.
+			if origin != "" && !s.originAllowed(origin) {
+				s.writeError(w, http.StatusForbidden, "forbidden: cross-origin request rejected")
+				return
+			}
+		}
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -125,6 +147,29 @@ func (s *Server) recover(next http.Handler) http.Handler {
 				s.writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// rateLimit applies the global per-IP limit to every request, slowing
+// scanners and bots. Health checks and OPTIONS preflights are exempt so
+// monitoring and CORS preflight are never throttled. Limited requests get
+// 429 with Retry-After.
+func (s *Server) rateLimit(next http.Handler) http.Handler {
+	if s.globalLimiter == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/health" || r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ok, retryAfter := s.globalLimiter.Allow(s.clientIP(r))
+		if !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+			s.writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+			return
+		}
 		next.ServeHTTP(w, r)
 	})
 }

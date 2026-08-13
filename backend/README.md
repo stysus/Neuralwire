@@ -39,6 +39,9 @@ English by default).
 - **Security headers** on every response: `X-Content-Type-Options: nosniff`,
   `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and a
   permissive-for-images `Content-Security-Policy` (anti-XSS/clickjacking)
+- **CSRF protection** on admin mutations: state-changing admin requests with a
+  browser `Origin` header must come from an allowed origin; non-browser
+  clients (no Origin) are allowed since they still need the bearer token
 - Admin API protected by simple bearer-token auth (`POST /api/admin/login`)
 
 ## Requirements
@@ -82,6 +85,7 @@ cycle with `POST /api/admin/fetch` (see below).
 | `VIEW_RATE_LIMIT` | `30`                     | Per-IP rate limit (per minute) for `POST /api/news/{id}/view`; `<=0` disables |
 | `TRENDING_CACHE_TTL_SECONDS` | `300`               | Cache TTL (seconds) for trending results; `<=0` disables |
 | `LOGIN_RATE_LIMIT` | `5`                       | Per-IP login attempts per minute (anti brute force); `<=0` disables |
+| `GLOBAL_RATE_LIMIT` | `120`                    | Per-IP requests per minute for every endpoint (anti scan/bot); `<=0` disables |
 | `ADMIN_USERNAME`     | `admin`                       | Admin login username                                 |
 | `ADMIN_PASSWORD`     | `admin123`                    | Admin login password. **Change it outside development** |
 | `ADMIN_TOKEN_SECRET` | dev value (see `.env.example`) | HMAC secret signing admin bearer tokens. **Change it outside development** |

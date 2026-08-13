@@ -16,7 +16,7 @@ func clearEnv(t *testing.T) {
 		"ADMIN_TOKEN_SECRET", "SCRAPE_MAX_PER_SOURCE", "SCRAPE_MAX_INSERT_PER_SOURCE",
 		"SCRAPE_TIMEOUT_SECONDS",
 		"SCRAPE_MIN_CONTENT_CHARS", "SCRAPE_DELAY_MIN_SECONDS", "SCRAPE_DELAY_MAX_SECONDS",
-		"VIEW_RATE_LIMIT", "TRENDING_CACHE_TTL_SECONDS", "LOGIN_RATE_LIMIT",
+		"VIEW_RATE_LIMIT", "TRENDING_CACHE_TTL_SECONDS", "LOGIN_RATE_LIMIT", "GLOBAL_RATE_LIMIT",
 	} {
 		t.Setenv(key, "")
 	}
@@ -102,6 +102,9 @@ func TestLoadRespectsExplicitEnv(t *testing.T) {
 	}
 	if cfg.LoginRateLimit != 5 {
 		t.Errorf("LoginRateLimit = %d, want default 5", cfg.LoginRateLimit)
+	}
+	if cfg.GlobalRateLimit != 120 {
+		t.Errorf("GlobalRateLimit = %d, want default 120", cfg.GlobalRateLimit)
 	}
 }
 
