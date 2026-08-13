@@ -1098,14 +1098,14 @@ func TestGlobalRateLimit(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	s := NewServer(ServerOptions{
-		NewsRepo:         repository.NewNewsRepository(db),
-		CategoryRepo:     repository.NewCategoryRepository(db),
-		SettingsRepo:     repository.NewSettingsRepository(db),
-		GlobalRateLimit:  3, // allow 3 requests per IP
-		Auth:             auth.NewManager("test-secret", 0),
-		AdminUser:        testAdminUser,
-		AdminPass:        testAdminPass,
-		Logger:           log.New(io.Discard, "", 0),
+		NewsRepo:        repository.NewNewsRepository(db),
+		CategoryRepo:    repository.NewCategoryRepository(db),
+		SettingsRepo:    repository.NewSettingsRepository(db),
+		GlobalRateLimit: 3, // allow 3 requests per IP
+		Auth:            auth.NewManager("test-secret", 0),
+		AdminUser:       testAdminUser,
+		AdminPass:       testAdminPass,
+		Logger:          log.New(io.Discard, "", 0),
 	})
 
 	h := s.Handler()
@@ -1129,7 +1129,6 @@ func TestGlobalRateLimit(t *testing.T) {
 	}
 }
 
-
 func TestCSRFProtect(t *testing.T) {
 	s := newTestServer(t) // allowOrigins includes localhost:5173
 	token := adminToken(t, s)
@@ -1137,7 +1136,7 @@ func TestCSRFProtect(t *testing.T) {
 
 	// Helper: POST to create article with optional Origin.
 	doPost := func(origin string) int {
-		body := []byte(`{"title":"CSRF `+origin+`","url":"https://example.com/x","category":"ai"}`)
+		body := []byte(`{"title":"CSRF ` + origin + `","url":"https://example.com/x","category":"ai"}`)
 		req := httptest.NewRequest(http.MethodPost, "/api/admin/news", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -1169,4 +1168,3 @@ func TestCSRFProtect(t *testing.T) {
 		t.Errorf("hostile-origin POST = %d, want 403", code)
 	}
 }
-

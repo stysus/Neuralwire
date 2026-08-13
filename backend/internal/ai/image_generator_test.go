@@ -3,7 +3,7 @@ package ai
 import (
 	"context"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,7 +20,7 @@ func TestImageGeneratorDisabledSkipsGeneration(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := NewImageGenerator("test-key", srv.URL, false, log.New(io.Discard, "", 0))
+	g := NewImageGenerator("test-key", srv.URL, false, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	got := g.Generate(context.Background(), "Some Article Title", "ai")
 	if called {
 		t.Error("disabled image generator should not call upstream")
@@ -41,7 +41,7 @@ func TestImageGeneratorUnsupportedSkipsFutureCalls(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := NewImageGenerator("test-key", srv.URL, true, log.New(io.Discard, "", 0))
+	g := NewImageGenerator("test-key", srv.URL, true, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	g.Generate(context.Background(), "Title One", "ai")
 	g.Generate(context.Background(), "Title Two", "ai")
 	if calls != 1 {
@@ -56,7 +56,7 @@ func TestImageGeneratorSuccessReturnsURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	g := NewImageGenerator("test-key", srv.URL, true, log.New(io.Discard, "", 0))
+	g := NewImageGenerator("test-key", srv.URL, true, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	got := g.Generate(context.Background(), "Title", "ai")
 	if got != "https://img.example.com/cover.png" {
 		t.Errorf("Generate = %q, want generated image URL", got)

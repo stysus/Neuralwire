@@ -3,7 +3,7 @@ package scraper
 import (
 	"context"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-func discardLogger() *log.Logger {
-	return log.New(io.Discard, "", 0)
+func discardLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 // articleHTML is a fixture page with navigation, an ad block, a sidebar,

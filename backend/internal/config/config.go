@@ -81,6 +81,12 @@ type Config struct {
 	// HTTPCompressionEnabled enables gzip/brotli response compression
 	// (default true). Set to false to disable compression entirely.
 	HTTPCompressionEnabled bool
+	// LogLevel is the minimum log level emitted: "debug", "info", "warn" or
+	// "error" (default "info").
+	LogLevel string
+	// LogFormat is the structured log output format: "text" (default) or
+	// "json".
+	LogFormat string
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -167,6 +173,8 @@ func Load() (Config, error) {
 		LoginRateLimit:           loginRateLimit,
 		GlobalRateLimit:          globalRateLimit,
 		HTTPCompressionEnabled:   compressionEnabled == nil || *compressionEnabled,
+		LogLevel:                 strings.ToLower(strings.TrimSpace(getenv("LOG_LEVEL", "info"))),
+		LogFormat:                strings.ToLower(strings.TrimSpace(getenv("LOG_FORMAT", "text"))),
 	}, nil
 }
 

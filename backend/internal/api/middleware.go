@@ -127,13 +127,20 @@ func (s *Server) originAllowed(origin string) bool {
 	return false
 }
 
-// log logs each request with status, method, path and duration.
+// log logs each request with status, method, path, client IP, and duration
+// using the structured slog logger. Response bodies are never logged.
 func (s *Server) log(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
-		s.logger.Printf("%s %s -> %d (%s)", r.Method, r.URL.Path, rec.status, time.Since(start).Round(time.Millisecond))
+		s.slog.Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rec.status,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"ip", s.clientIP(r),
+		)
 	})
 }
 
@@ -143,7 +150,12 @@ func (s *Server) recover(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				s.logger.Printf("api: panic serving %s %s: %v\n%s", r.Method, r.URL.Path, rec, debug.Stack())
+				s.slog.Error("api: panic serving request",
+					"method", r.Method,
+					"path", r.URL.Path,
+					"panic", rec,
+					"stack", string(debug.Stack()),
+				)
 				s.writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()

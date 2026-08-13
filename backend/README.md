@@ -48,6 +48,11 @@ English by default).
   for clients that advertise `Accept-Encoding`, `/api/news/trending` is cached
   `max-age=60`, static assets are cached long-term, and successful GETs can be
   revalidated with `If-None-Match` (304 Not Modified)
+- **Structured logging** (Go `slog`): every HTTP request is logged with
+  method, path, status, duration, and client IP; fetch cycles, AI calls, and
+  errors log structured key=value fields. `LOG_LEVEL` filters output and
+  `LOG_FORMAT=json` emits JSON lines for log aggregation. Request bodies and
+  bearer tokens are never logged
 
 ## Requirements
 
@@ -92,6 +97,8 @@ cycle with `POST /api/admin/fetch` (see below).
 | `LOGIN_RATE_LIMIT` | `5`                       | Per-IP login attempts per minute (anti brute force); `<=0` disables |
 | `GLOBAL_RATE_LIMIT` | `120`                    | Per-IP requests per minute for every endpoint (anti scan/bot); `<=0` disables |
 | `HTTP_COMPRESSION_ENABLED` | `true`                | Enable gzip/brotli response compression for JSON/text payloads; set `false` to disable |
+| `LOG_LEVEL` | `info`                    | Minimum structured log level: `debug`, `info`, `warn` or `error` |
+| `LOG_FORMAT` | `text`                  | Structured log format: `text` (default) or `json` for production log aggregation |
 | `ADMIN_USERNAME`     | `admin`                       | Admin login username                                 |
 | `ADMIN_PASSWORD`     | `admin123`                    | Admin login password. **Change it outside development** |
 | `ADMIN_TOKEN_SECRET` | dev value (see `.env.example`) | HMAC secret signing admin bearer tokens. **Change it outside development** |

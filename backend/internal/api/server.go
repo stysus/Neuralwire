@@ -4,7 +4,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -34,6 +36,7 @@ type Server struct {
 	adminPass    string
 	fetcher      FeedFetcher
 	logger       *log.Logger
+	slog         *slog.Logger
 
 	// fetchMu guards the in-flight manual fetch cancel function so the admin
 	// cancel endpoint can abort a running cycle without data races.
@@ -90,6 +93,9 @@ type ServerOptions struct {
 	// DisableCompression turns off gzip/brotli response compression.
 	DisableCompression bool
 	Logger             *log.Logger
+	// Slog is the structured logger used for request/error logging. When nil,
+	// a discard logger is used so request logging is a no-op.
+	Slog *slog.Logger
 }
 
 // NewServer builds a Server.
@@ -102,6 +108,9 @@ func NewServer(opts ServerOptions) *Server {
 	}
 	if opts.Logger == nil {
 		opts.Logger = log.Default()
+	}
+	if opts.Slog == nil {
+		opts.Slog = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 	if opts.ViewRateWindow <= 0 {
 		opts.ViewRateWindow = time.Minute
@@ -116,6 +125,7 @@ func NewServer(opts ServerOptions) *Server {
 		adminPass:          opts.AdminPass,
 		fetcher:            opts.Fetcher,
 		logger:             opts.Logger,
+		slog:               opts.Slog,
 		trustProxy:         opts.TrustProxy,
 		disableCompression: opts.DisableCompression,
 	}
@@ -191,7 +201,7 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		s.logger.Printf("api: encode response: %v", err)
+		s.slog.Error("api: encode response", "error", err)
 	}
 }
 

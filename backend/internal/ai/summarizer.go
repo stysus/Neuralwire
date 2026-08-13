@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
-	"log"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -52,7 +52,7 @@ type SummarizerOptions struct {
 	Timeout       time.Duration
 	MaxInputChars int
 	FallbackChars int
-	Logger        *log.Logger
+	Logger        *slog.Logger
 }
 
 type openAISummarizer struct {
@@ -62,7 +62,7 @@ type openAISummarizer struct {
 	client        *http.Client
 	maxInputChars int
 	fallbackChars int
-	logger        *log.Logger
+	logger        *slog.Logger
 }
 
 // NewSummarizer builds a Summarizer. With an empty APIKey it always uses
@@ -78,7 +78,7 @@ func NewSummarizer(opts SummarizerOptions) Summarizer {
 		opts.Timeout = 30 * time.Second
 	}
 	if opts.Logger == nil {
-		opts.Logger = log.Default()
+		opts.Logger = slog.Default()
 	}
 	return &openAISummarizer{
 		apiKey:        opts.APIKey,
@@ -182,7 +182,10 @@ func (s *openAISummarizer) Categorize(ctx context.Context, title, content, defau
 	if validCategories[result] {
 		return result
 	}
-	s.logger.Printf("ai: categorize returned invalid category %q, using default %q", result, defaultCategory)
+	s.logger.Warn("ai: categorize returned invalid category, using default",
+		"result", result,
+		"default", defaultCategory,
+	)
 	return defaultCategory
 }
 

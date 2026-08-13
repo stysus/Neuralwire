@@ -4,10 +4,13 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -23,12 +26,17 @@ import (
 )
 
 func main() {
-	logger := log.New(os.Stdout, "[neuralwire] ", log.LstdFlags)
-
 	cfg, err := config.Load()
 	if err != nil {
-		logger.Fatalf("config: %v", err)
+		log.Fatalf("config: %v", err)
 	}
+
+	// Structured logging: one slog handler drives everything. Components that
+	// still take a *log.Logger get slog.NewLogLogger, so their output keeps
+	// the same key=value structure, level and timestamp.
+	handler := buildLogHandler(cfg.LogLevel, cfg.LogFormat, os.Stdout)
+	slogLogger := slog.New(handler)
+	logger := slog.NewLogLogger(handler, slog.LevelInfo)
 
 	db, err := database.Open(cfg.DatabasePath)
 	if err != nil {
@@ -68,7 +76,7 @@ func main() {
 		Model:   cfg.AISummaryModel,
 		BaseURL: cfg.AISummaryBaseURL,
 		Timeout: 30 * time.Second,
-		Logger:  logger,
+		Logger:  slogLogger,
 	})
 
 	// AI image generation is enabled only when the provider supports it
@@ -84,7 +92,7 @@ func main() {
 	if !imgGenEnabled {
 		logger.Printf("ai: image generation disabled (provider does not support images); using stock covers")
 	}
-	imageGenerator := ai.NewImageGenerator(cfg.AISummaryAPIKey, cfg.AISummaryBaseURL, imgGenEnabled, logger)
+	imageGenerator := ai.NewImageGenerator(cfg.AISummaryAPIKey, cfg.AISummaryBaseURL, imgGenEnabled, slogLogger)
 
 	// Advisory news-value scoring (AI + heuristic weighted). Admins remain
 	// the final decision makers; scoring never auto-publishes.
@@ -102,7 +110,7 @@ func main() {
 		Scraper: scraper.New(scraper.Options{
 			Timeout:   cfg.ScrapeTimeout,
 			UserAgent: cfg.UserAgent,
-			Logger:    logger,
+			Logger:    slogLogger,
 		}),
 		ScrapeMax:          cfg.ScrapeMaxPerSource,
 		MinContentChars:    cfg.ScrapeMinContentChars,
@@ -112,7 +120,7 @@ func main() {
 		Scorer:             scoreService,
 		UserAgent:          cfg.UserAgent,
 		HTTPClient:         &http.Client{Timeout: 30 * time.Second},
-		Logger:             logger,
+		Logger:             slogLogger,
 	})
 
 	srv := api.NewServer(api.ServerOptions{
@@ -131,6 +139,7 @@ func main() {
 		AdminPass:          cfg.AdminPassword,
 		Fetcher:            rssFetcher,
 		Logger:             logger,
+		Slog:               slogLogger,
 	})
 
 	httpServer := &http.Server{
@@ -163,4 +172,31 @@ func main() {
 		logger.Printf("shutdown: %v", err)
 	}
 	logger.Printf("server stopped")
+}
+
+// buildLogHandler constructs a slog handler from the configured level and
+// format. Text is the default for local development; JSON suits production
+// log aggregation.
+func buildLogHandler(level, format string, w io.Writer) slog.Handler {
+	opts := &slog.HandlerOptions{Level: parseLogLevel(level)}
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "json":
+		return slog.NewJSONHandler(w, opts)
+	default:
+		return slog.NewTextHandler(w, opts)
+	}
+}
+
+// parseLogLevel maps a LOG_LEVEL string to a slog.Level, defaulting to Info.
+func parseLogLevel(level string) slog.Level {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "debug":
+		return slog.LevelDebug
+	case "warn":
+		return slog.LevelWarn
+	case "error":
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
+	}
 }

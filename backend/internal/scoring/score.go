@@ -245,4 +245,3 @@ func (r *RuleScorer) Score(title, content, source string) HeuristicResult {
 	res.Score = score
 	return res
 }
-

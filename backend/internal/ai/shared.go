@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -52,7 +52,7 @@ func resolveAIConfig(configuredKey, configuredModel, endpoint string) (apiKey, b
 func chatCompletion(
 	ctx context.Context,
 	client *http.Client,
-	logger *log.Logger,
+	logger *slog.Logger,
 	endpoint, apiKey, model, system, user string,
 	maxTokens int,
 ) (string, bool) {
@@ -65,7 +65,7 @@ func chatCompletion(
 	if empty {
 		text, ok, _ = doChatCompletion(ctx, client, logger, endpoint, apiKey, model, system, user, maxTokens*2)
 		if ok {
-			logger.Printf("ai: retry succeeded with larger token budget")
+			logger.Info("ai: retry succeeded with larger token budget")
 			return text, true
 		}
 	}
@@ -79,7 +79,7 @@ func chatCompletion(
 func doChatCompletion(
 	ctx context.Context,
 	client *http.Client,
-	logger *log.Logger,
+	logger *slog.Logger,
 	endpoint, apiKey, model, system, user string,
 	maxTokens int,
 ) (string, bool, bool) {
@@ -92,13 +92,13 @@ func doChatCompletion(
 		MaxTokens: maxTokens,
 	})
 	if err != nil {
-		logger.Printf("ai: marshal request: %v", err)
+		logger.Error("ai: marshal request", "error", err)
 		return "", false, false
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(reqBody))
 	if err != nil {
-		logger.Printf("ai: build request: %v", err)
+		logger.Error("ai: build request", "error", err)
 		return "", false, false
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -106,24 +106,24 @@ func doChatCompletion(
 
 	resp, err := client.Do(req)
 	if err != nil {
-		logger.Printf("ai: request failed: %v", err)
+		logger.Error("ai: request failed", "error", err)
 		return "", false, false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
-		logger.Printf("ai: upstream returned %s: %s", resp.Status, string(body))
+		logger.Error("ai: upstream returned non-200", "status", resp.Status, "body", string(body))
 		return "", false, false
 	}
 
 	var parsed chatResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&parsed); err != nil {
-		logger.Printf("ai: decode response: %v", err)
+		logger.Error("ai: decode response", "error", err)
 		return "", false, false
 	}
 	if len(parsed.Choices) == 0 || strings.TrimSpace(parsed.Choices[0].Message.Content) == "" {
-		logger.Printf("ai: empty response from upstream")
+		logger.Warn("ai: empty response from upstream")
 		return "", false, true
 	}
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), true, false
@@ -137,7 +137,7 @@ func doChatCompletion(
 func generateImage(
 	ctx context.Context,
 	client *http.Client,
-	logger *log.Logger,
+	logger *slog.Logger,
 	endpoint, apiKey, prompt string,
 ) (url string, unsupported bool, ok bool) {
 	reqBody, err := json.Marshal(imageReq{
@@ -165,7 +165,7 @@ func generateImage(
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		logger.Printf("ai: DALL-E image generation failed (status %s): %s", resp.Status, string(body))
+		logger.Error("ai: image generation failed", "status", resp.Status, "body", string(body))
 		unsupported := resp.StatusCode == http.StatusNotFound ||
 			resp.StatusCode == http.StatusMethodNotAllowed ||
 			resp.StatusCode == http.StatusNotImplemented

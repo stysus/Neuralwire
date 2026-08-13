@@ -11,7 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -47,7 +47,7 @@ type Options struct {
 	// MaxBytes caps the size of the response body read (default 5 MiB).
 	MaxBytes int64
 	// Logger receives scrape diagnostics.
-	Logger *log.Logger
+	Logger *slog.Logger
 }
 
 // Scraper fetches and extracts readable article content.
@@ -56,7 +56,7 @@ type Scraper struct {
 	userAgent string
 	maxBytes  int64
 	timeout   time.Duration
-	logger    *log.Logger
+	logger    *slog.Logger
 }
 
 // New builds a Scraper.
@@ -71,7 +71,7 @@ func New(opts Options) *Scraper {
 		opts.MaxBytes = 5 << 20 // 5 MiB
 	}
 	if opts.Logger == nil {
-		opts.Logger = log.Default()
+		opts.Logger = slog.Default()
 	}
 	return &Scraper{
 		// The per-request timeout is enforced by the context; the client has

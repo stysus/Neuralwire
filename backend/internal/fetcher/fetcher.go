@@ -5,7 +5,7 @@ package fetcher
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"math/rand/v2"
 	"net/http"
 	"strings"
@@ -81,7 +81,7 @@ type FetcherOptions struct {
 	// NeuralwireBot dev UA.
 	UserAgent  string
 	HTTPClient *http.Client
-	Logger     *log.Logger
+	Logger     *slog.Logger
 }
 
 // Fetcher polls RSS sources and stores new articles as drafts.
@@ -99,7 +99,7 @@ type Fetcher struct {
 	scorer          *scoring.ScoreService
 	client          *http.Client
 	parser          *gofeed.Parser
-	logger          *log.Logger
+	logger          *slog.Logger
 	mu              sync.RWMutex
 	progress        FetchProgress
 }
@@ -122,7 +122,7 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 		opts.HTTPClient = &http.Client{Timeout: 30 * time.Second}
 	}
 	if opts.Logger == nil {
-		opts.Logger = log.Default()
+		opts.Logger = slog.Default()
 	}
 	if opts.ScrapeMax <= 0 {
 		opts.ScrapeMax = defaultScrapeMax
@@ -238,7 +238,7 @@ func (f *Fetcher) FetchAll(ctx context.Context) (FetchStats, error) {
 		return stats, err
 	}
 	if len(sources) == 0 {
-		f.logger.Printf("fetcher: no enabled rss sources")
+		f.logger.Warn("fetcher: no enabled rss sources")
 		return stats, nil
 	}
 
@@ -246,7 +246,7 @@ func (f *Fetcher) FetchAll(ctx context.Context) (FetchStats, error) {
 	f.setProgress(true, len(sources), 0, sources[0].Name, started)
 	defer f.setProgress(false, len(sources), len(sources), "", started)
 
-	f.logger.Printf("fetcher: fetching %d rss source(s)", len(sources))
+	f.logger.Info("fetcher: starting fetch cycle", "sources", len(sources))
 	var fetchErr error
 	for i, src := range sources {
 		f.setProgress(true, len(sources), i, src.Name, started)
@@ -254,7 +254,7 @@ func (f *Fetcher) FetchAll(ctx context.Context) (FetchStats, error) {
 		if err != nil {
 			fetchErr = errors.Join(fetchErr, err)
 			srcStats.Error = err.Error()
-			f.logger.Printf("fetcher: source %q failed: %v", src.Name, err)
+			f.logger.Error("fetcher: source failed", "source", src.Name, "error", err)
 		}
 		stats.Sources = append(stats.Sources, srcStats)
 		stats.TotalNew += srcStats.Inserted
@@ -302,7 +302,7 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 
 		exists, err := f.news.ExistsByURL(link)
 		if err != nil {
-			f.logger.Printf("fetcher: exists check failed for %q: %v", link, err)
+			f.logger.Error("fetcher: exists check failed", "url", link, "error", err)
 			continue
 		}
 		if exists {
@@ -329,7 +329,7 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 				}
 				usedScrape = true
 			} else if scrapeErr != nil {
-				f.logger.Printf("fetcher: scrape failed for %q: %v", link, scrapeErr)
+				f.logger.Warn("fetcher: scrape failed", "url", link, "error", scrapeErr)
 			}
 		}
 
@@ -342,9 +342,10 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 		// excerpt alone is not enough for a complete news article.
 		if f.minContentChars > 0 && utf8.RuneCountInString(content) < f.minContentChars {
 			skippedLowQuality++
-			f.logger.Printf(
-				"fetcher: skipped %q (low quality, content %d chars < %d)",
-				link, utf8.RuneCountInString(content), f.minContentChars,
+			f.logger.Warn("fetcher: skipped low quality draft",
+				"url", link,
+				"content_chars", utf8.RuneCountInString(content),
+				"min_content_chars", f.minContentChars,
 			)
 			continue
 		}
@@ -406,7 +407,7 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 		}
 
 		if _, err := f.news.Create(article); err != nil {
-			f.logger.Printf("fetcher: insert failed for %q: %v", link, err)
+			f.logger.Error("fetcher: insert failed", "url", link, "error", err)
 			continue
 		}
 		inserted++
@@ -420,9 +421,9 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 		// a single fetch cycle can never flood drafts even when RSS excerpts
 		// are long enough to pass the quality gate.
 		if f.maxInsert > 0 && inserted >= f.maxInsert {
-			f.logger.Printf(
-				"fetcher: source %q reached insert budget %d; ignoring remaining items",
-				src.Name, f.maxInsert,
+			f.logger.Info("fetcher: source reached insert budget; ignoring remaining items",
+				"source", src.Name,
+				"budget", f.maxInsert,
 			)
 			break
 		}
@@ -434,11 +435,14 @@ func (f *Fetcher) processFeed(ctx context.Context, src models.RSSSource, feed *g
 	stats.SkippedLowQuality = skippedLowQuality
 
 	if err := f.sources.UpdateLastFetched(src.ID, time.Now()); err != nil {
-		f.logger.Printf("fetcher: update last_fetched for %q: %v", src.Name, err)
+		f.logger.Error("fetcher: update last_fetched failed", "source", src.Name, "error", err)
 	}
-	f.logger.Printf(
-		"fetcher: source %q inserted %d new draft(s) (scraped: %d, fallback: %d, skipped-low-quality: %d)",
-		src.Name, inserted, scraped, fallback, skippedLowQuality,
+	f.logger.Info("fetcher: source fetch complete",
+		"source", src.Name,
+		"inserted", inserted,
+		"scraped", scraped,
+		"fallback", fallback,
+		"skipped_low_quality", skippedLowQuality,
 	)
 	return stats, nil
 }

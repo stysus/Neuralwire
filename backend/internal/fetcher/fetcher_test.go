@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -135,9 +135,9 @@ func testItem(title, link, content string) *gofeed.Item {
 }
 
 func newTestFetcher(scraperImpl ContentScraper, scrapeMax int, logBuf *bytes.Buffer) *Fetcher {
-	logger := log.New(io.Discard, "", 0)
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	if logBuf != nil {
-		logger = log.New(logBuf, "", 0)
+		logger = slog.New(slog.NewTextHandler(logBuf, nil))
 	}
 	return &Fetcher{
 		sources:    &fakeSourceStore{sources: []models.RSSSource{{ID: 1, Name: "Test Feed", Category: "ai"}}},
@@ -395,7 +395,7 @@ func TestProcessFeedLogsScrapedVsFallback(t *testing.T) {
 	}
 
 	line := buf.String()
-	if !strings.Contains(line, "inserted 2 new draft(s) (scraped: 1, fallback: 1, skipped-low-quality: 0)") {
+	if !strings.Contains(line, "inserted=2") || !strings.Contains(line, "scraped=1") || !strings.Contains(line, "fallback=1") || !strings.Contains(line, "skipped_low_quality=0") {
 		t.Errorf("log line = %q, want scraped/fallback counts", strings.TrimSpace(line))
 	}
 }
@@ -422,7 +422,7 @@ func TestProcessFeedSkipsLowQualityContent(t *testing.T) {
 	if news.created[0].URL != "https://example.com/long" {
 		t.Errorf("created article URL = %q, want the long one", news.created[0].URL)
 	}
-	if !strings.Contains(buf.String(), `skipped "https://example.com/short" (low quality`) {
+	if !strings.Contains(buf.String(), `url=https://example.com/short`) || !strings.Contains(buf.String(), "skipped low quality draft") {
 		t.Errorf("log missing low-quality skip message:\n%s", buf.String())
 	}
 }

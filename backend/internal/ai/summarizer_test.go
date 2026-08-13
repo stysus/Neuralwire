@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,8 +12,8 @@ import (
 	"time"
 )
 
-func noopLogger() *log.Logger {
-	return log.New(io.Discard, "", 0)
+func noopLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func TestSummarizeWithoutAPIKeyFallsBack(t *testing.T) {

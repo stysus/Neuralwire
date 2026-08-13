@@ -3,7 +3,7 @@ package ai
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -23,14 +23,14 @@ type openAIImageGenerator struct {
 	// (404/405/501), so later calls skip straight to the stock fallback.
 	unsupported bool
 	client      *http.Client
-	logger      *log.Logger
+	logger      *slog.Logger
 }
 
 // NewImageGenerator creates an ImageGenerator client. When enabled is false,
 // generation is skipped entirely and only the stock fallback is used.
-func NewImageGenerator(apiKey, baseURL string, enabled bool, logger *log.Logger) ImageGenerator {
+func NewImageGenerator(apiKey, baseURL string, enabled bool, logger *slog.Logger) ImageGenerator {
 	if logger == nil {
-		logger = log.Default()
+		logger = slog.Default()
 	}
 	endpoint := strings.TrimRight(baseURL, "/") + "/images/generations"
 	return &openAIImageGenerator{
@@ -78,7 +78,7 @@ func (g *openAIImageGenerator) Generate(ctx context.Context, title, category str
 		url, unsupported, ok := generateImage(ctx, g.client, g.logger, imageEndpoint, apiKey, prompt)
 		if unsupported {
 			g.unsupported = true
-			g.logger.Printf("ai: image generation not supported by provider; skipping future attempts")
+			g.logger.Warn("ai: image generation not supported by provider; skipping future attempts")
 		}
 		if ok {
 			return url
