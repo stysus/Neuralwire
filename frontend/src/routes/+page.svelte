@@ -72,6 +72,14 @@
 		selectHero(heroIndex - 1);
 	}
 
+	function collapseFeed() {
+		visibleCount = 15;
+		const element = document.getElementById('chronicle-feed');
+		if (element) {
+			element.scrollIntoView({ behavior: 'smooth' });
+		}
+	}
+
 	$effect(() => {
 		if (heroIndex >= heroArticles.length) {
 			heroIndex = 0;
@@ -273,7 +281,7 @@
 <TrendingNews />
 
 <!-- News Feed Section -->
-<section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+<section id="chronicle-feed" class="mx-auto max-w-7xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
 	<!-- Feed Title & Categories Filter -->
 	<div
 		class="mb-8 flex flex-col justify-between gap-4 border-b border-[rgba(255,255,255,0.08)] pb-6 md:flex-row md:items-end"
@@ -377,14 +385,49 @@
 		</div>
 
 		{#if filteredFeed.length > visibleCount}
-			<div class="mt-12 flex justify-center">
+			<div class="mt-12 flex justify-center gap-4">
 				<button
 					onclick={() => (visibleCount += 15)}
 					class="cursor-pointer rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-8 py-3 font-mono text-xs font-bold tracking-widest text-[#22D3EE] uppercase transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white"
 				>
 					Load More
 				</button>
+				{#if visibleCount > 15}
+					<button
+						onclick={collapseFeed}
+						class="cursor-pointer rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 px-8 py-3 font-mono text-xs font-bold tracking-widest text-[#E11D48] uppercase transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white"
+					>
+						Hide Feed
+					</button>
+				{/if}
 			</div>
+		{:else if visibleCount > 15}
+			<div class="mt-12 flex justify-center">
+				<button
+					onclick={collapseFeed}
+					class="cursor-pointer rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 px-8 py-3 font-mono text-xs font-bold tracking-widest text-[#E11D48] uppercase transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white"
+				>
+					Hide Feed
+				</button>
+			</div>
+		{/if}
+
+		{#if visibleCount > 15}
+			<button
+				onclick={collapseFeed}
+				class="fixed right-6 bottom-6 z-40 flex h-10 cursor-pointer items-center justify-center space-x-2 rounded-full border border-[#E11D48]/40 bg-[#0A0E17]/90 px-4 py-2 font-mono text-[10px] font-bold tracking-widest text-[#E11D48] shadow-[0_0_15px_rgba(225,29,72,0.15)] backdrop-blur-sm transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white active:scale-95"
+				title="Collapse Feed"
+			>
+				<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2.5"
+						d="M5 15l7-7 7 7"
+					/>
+				</svg>
+				<span>COLLAPSE FEED</span>
+			</button>
 		{/if}
 	{:else}
 		<!-- Empty State -->
