@@ -58,9 +58,7 @@
 	class="mx-auto w-full max-w-7xl px-4 py-10 sm:px-6 lg:px-8"
 	aria-labelledby="trending-heading"
 >
-	<div
-		class="border-y border-[rgba(255,255,255,0.08)] bg-[#0F172A]/10 py-6 backdrop-blur-sm"
-	>
+	<div class="border-y border-[rgba(255,255,255,0.08)] bg-[#0F172A]/10 py-6 backdrop-blur-sm">
 		<div class="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
 			<div>
 				<h2
@@ -78,10 +76,10 @@
 
 		{#if isLoading}
 			<div class="grid gap-3 md:grid-cols-5">
-				{#each Array(5) as _, index}
+				{#each [1, 2, 3, 4, 5] as index}
 					<div
 						class="h-24 animate-pulse rounded-lg border border-[rgba(255,255,255,0.06)] bg-[#0A0E17]/60"
-						aria-label="Loading trending item {index + 1}"
+						aria-label="Loading trending item {index}"
 					></div>
 				{/each}
 			</div>

@@ -1,6 +1,6 @@
 import { mockCategories, type Category, type News } from './mockData';
 
-const BASE_URL = 'http://localhost:8080/api';
+export const BASE_URL = 'http://localhost:8080/api';
 
 /**
  * Gets SvelteKit-compatible fetch or global fetch.
@@ -40,7 +40,9 @@ export async function getNews(
 	// Build query string. Search uses the backend ?q= endpoint, optionally combined
 	// with a category filter; otherwise fetch a large page to populate the feeds.
 	const isSearch = searchQuery && searchQuery.trim().length > 0;
-	let url = isSearch ? `${BASE_URL}/news?q=${encodeURIComponent(searchQuery)}&page_size=20` : `${BASE_URL}/news?page_size=100`;
+	let url = isSearch
+		? `${BASE_URL}/news?q=${encodeURIComponent(searchQuery)}&page_size=20`
+		: `${BASE_URL}/news?page_size=100`;
 	if (categorySlug) {
 		url += `&category=${encodeURIComponent(categorySlug)}`;
 	}

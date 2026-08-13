@@ -1,9 +1,30 @@
+<script lang="ts">
+	import { getSiteUrl } from '$lib/siteUrl';
+</script>
+
 <svelte:head>
 	<title>About | Neuralwire AI News & Editorial</title>
 	<meta
 		name="description"
 		content="Neuralwire is a premier news syndicate and editorial chronicle investigating the emergence of supercomputing, quantum intelligence, and cybernetics."
 	/>
+	<meta name="robots" content="index, follow" />
+	<link rel="canonical" href="{getSiteUrl()}/about" />
+	<meta property="og:title" content="About | Neuralwire AI News & Editorial" />
+	<meta
+		property="og:description"
+		content="Neuralwire is a premier news syndicate and editorial chronicle investigating the emergence of supercomputing, quantum intelligence, and cybernetics."
+	/>
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{getSiteUrl()}/about" />
+	<meta property="og:image" content="{getSiteUrl()}/favicon.svg" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="About | Neuralwire AI News & Editorial" />
+	<meta
+		name="twitter:description"
+		content="Neuralwire is a premier news syndicate and editorial chronicle investigating the emergence of supercomputing, quantum intelligence, and cybernetics."
+	/>
+	<meta name="twitter:image" content="{getSiteUrl()}/favicon.svg" />
 </svelte:head>
 
 <section class="mx-auto max-w-4xl px-4 py-16 sm:px-6 md:py-24 lg:px-8">

@@ -3,6 +3,7 @@
 	import type { News } from '$lib/mockData';
 	import { goto } from '$app/navigation';
 	import Image from '$lib/Image.svelte';
+	import { getSiteUrl } from '$lib/siteUrl';
 
 	let { data }: { data: PageData } = $props();
 
@@ -55,6 +56,23 @@
 		name="description"
 		content="Search the Neuralwire archives for artificial intelligence news, documentation, and chronicles."
 	/>
+	<meta name="robots" content="index, follow" />
+	<link rel="canonical" href="{getSiteUrl()}/search" />
+	<meta property="og:title" content="Search Archives | Neuralwire" />
+	<meta
+		property="og:description"
+		content="Search the Neuralwire archives for artificial intelligence news, documentation, and chronicles."
+	/>
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{getSiteUrl()}/search" />
+	<meta property="og:image" content="{getSiteUrl()}/favicon.svg" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="Search Archives | Neuralwire" />
+	<meta
+		name="twitter:description"
+		content="Search the Neuralwire archives for artificial intelligence news, documentation, and chronicles."
+	/>
+	<meta name="twitter:image" content="{getSiteUrl()}/favicon.svg" />
 </svelte:head>
 
 <section class="mx-auto max-w-7xl flex-grow px-4 py-12 sm:px-6 md:py-16 lg:px-8">

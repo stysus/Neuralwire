@@ -4,6 +4,7 @@
 	import type { News } from '$lib/mockData';
 	import Image from '$lib/Image.svelte';
 	import TrendingNews from '$lib/TrendingNews.svelte';
+	import { getSiteUrl } from '$lib/siteUrl';
 
 	let { data }: { data: PageData } = $props();
 
@@ -96,6 +97,24 @@
 		return () => window.clearInterval(interval);
 	});
 </script>
+
+<svelte:head>
+	<link rel="canonical" href="{getSiteUrl()}/" />
+	<meta property="og:title" content="Neuralwire | AI News & Editorial" />
+	<meta
+		property="og:description"
+		content="An editorial news portal for artificial intelligence, neural networks, and the future of computation."
+	/>
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{getSiteUrl()}/" />
+	<meta property="og:image" content="{getSiteUrl()}/favicon.svg" />
+	<meta name="twitter:title" content="Neuralwire | AI News & Editorial" />
+	<meta
+		name="twitter:description"
+		content="An editorial news portal for artificial intelligence, neural networks, and the future of computation."
+	/>
+	<meta name="twitter:image" content="{getSiteUrl()}/favicon.svg" />
+</svelte:head>
 
 <!-- Hero Section -->
 {#if featuredArticle}

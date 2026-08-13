@@ -3,6 +3,7 @@
 	import type { PageData } from './$types';
 	import type { News } from '$lib/mockData';
 	import Image from '$lib/Image.svelte';
+	import { absoluteUrl, getSiteUrl } from '$lib/siteUrl';
 
 	let { data }: { data: PageData } = $props();
 
@@ -17,12 +18,6 @@
 			month: 'long',
 			day: 'numeric'
 		});
-	}
-
-	function getReadingTime(text: string) {
-		const words = text.split(/\s+/).length;
-		const minutes = Math.ceil(words / 220);
-		return `${minutes} min read`;
 	}
 
 	// Feedback Form State
@@ -177,13 +172,19 @@
 <svelte:head>
 	<title>{article.title} | Neuralwire</title>
 	<meta name="description" content={article.summary} />
+	<meta name="robots" content="index, follow" />
+	<link rel="canonical" href="{getSiteUrl()}/{article.slug}" />
 	<!-- Article Specific OG -->
 	<meta property="og:title" content={article.title} />
 	<meta property="og:description" content={article.summary} />
 	<meta property="og:type" content="article" />
-	{#if article.image_url}
-		<meta property="og:image" content={article.image_url} />
-	{/if}
+	<meta property="og:url" content="{getSiteUrl()}/{article.slug}" />
+	<meta property="og:image" content={absoluteUrl(article.image_url)} />
+	<!-- Twitter Card -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content={article.title} />
+	<meta name="twitter:description" content={article.summary} />
+	<meta name="twitter:image" content={absoluteUrl(article.image_url)} />
 </svelte:head>
 
 <article class="relative w-full flex-grow pb-16">

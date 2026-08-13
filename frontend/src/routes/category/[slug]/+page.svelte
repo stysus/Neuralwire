@@ -2,6 +2,7 @@
 	import type { PageData } from './$types';
 	import type { News } from '$lib/mockData';
 	import Image from '$lib/Image.svelte';
+	import { getSiteUrl } from '$lib/siteUrl';
 
 	let { data }: { data: PageData } = $props();
 
@@ -47,6 +48,23 @@
 		name="description"
 		content="Explore news and in-depth articles about {category.name} from the editors of Neuralwire."
 	/>
+	<meta name="robots" content="index, follow" />
+	<link rel="canonical" href="{getSiteUrl()}/category/{category.slug}" />
+	<meta property="og:title" content="{category.name} | Neuralwire AI News" />
+	<meta
+		property="og:description"
+		content="Explore news and in-depth articles about {category.name} from the editors of Neuralwire."
+	/>
+	<meta property="og:type" content="website" />
+	<meta property="og:url" content="{getSiteUrl()}/category/{category.slug}" />
+	<meta property="og:image" content="{getSiteUrl()}/favicon.svg" />
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="{category.name} | Neuralwire AI News" />
+	<meta
+		name="twitter:description"
+		content="Explore news and in-depth articles about {category.name} from the editors of Neuralwire."
+	/>
+	<meta name="twitter:image" content="{getSiteUrl()}/favicon.svg" />
 </svelte:head>
 
 <section id="category-feed" class="mx-auto max-w-7xl flex-grow px-4 py-12 sm:px-6 md:py-16 lg:px-8">

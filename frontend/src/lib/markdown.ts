@@ -56,7 +56,7 @@ export function markdownToHtml(md: string): string {
 			// 6. Paragraphs (double newlines)
 			// Split by double newlines, wrap in <p> if not already block elements
 			const lines = block.split(/\n\n+/);
-			const processedLines = lines.map(line => {
+			const processedLines = lines.map((line) => {
 				const trimmed = line.trim();
 				if (!trimmed) return '';
 				// If it already starts with a block tag, don't wrap it

@@ -90,7 +90,10 @@
 </script>
 
 {#if progress?.running}
-	<div class="mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#0F172A]/40 p-5 font-mono text-xs">
+	<div
+		class="mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#0F172A]/40 p-5 font-mono text-xs"
+		data-active={active}
+	>
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
 			<span class="animate-pulse font-bold tracking-widest text-[#22D3EE] uppercase"
 				>Fetch Cycle in Progress</span

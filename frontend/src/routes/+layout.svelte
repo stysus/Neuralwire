@@ -26,20 +26,15 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
-	<!-- Primary SEO Meta Tags -->
+	<!-- Primary SEO Meta Tags (page-level heads override with page-specific tags) -->
 	<title>Neuralwire | AI News, Neural Networks & Future Computation</title>
 	<meta
 		name="description"
 		content="An editorial news portal for artificial intelligence, neural networks, and the future of computation. Bridging the gap between silicon and humanity."
 	/>
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<!-- OpenGraph -->
-	<meta property="og:title" content="Neuralwire | AI News & Editorial" />
-	<meta
-		property="og:description"
-		content="An editorial news portal for artificial intelligence, neural networks, and the future of computation."
-	/>
-	<meta property="og:type" content="website" />
+	<meta name="robots" content="index, follow" />
+	<meta property="og:site_name" content="Neuralwire" />
 	<meta name="twitter:card" content="summary_large_image" />
 </svelte:head>
 

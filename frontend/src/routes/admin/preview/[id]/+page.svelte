@@ -455,13 +455,13 @@
 			<!-- Image URL editor in-place -->
 			{#if isEditing}
 				<div class="mb-6 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/40 p-4">
-				<label for="cover-image-url" class="mb-2 block font-mono text-[10px] text-slate-400"
-					>COVER IMAGE URL</label
-				>
-				<input
-					id="cover-image-url"
-					type="text"
-					bind:value={editImageURL}
+					<label for="cover-image-url" class="mb-2 block font-mono text-[10px] text-slate-400"
+						>COVER IMAGE URL</label
+					>
+					<input
+						id="cover-image-url"
+						type="text"
+						bind:value={editImageURL}
 						class="mb-3 w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/60 px-3 py-2 font-sans text-xs text-white transition-colors focus:border-[#22D3EE] focus:outline-none"
 						placeholder="Paste cover image link..."
 					/>

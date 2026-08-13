@@ -321,13 +321,6 @@
 	}
 
 	// Score display helpers -------------------------------------------------
-	function scoreColor(label: string) {
-		if (label === 'HIGH') return '#22D3EE';
-		if (label === 'MEDIUM') return '#F59E0B';
-		if (label === 'LOW') return '#64748B';
-		return '#64748B';
-	}
-
 	function scoreClass(label: string) {
 		if (label === 'HIGH') return 'border-[#22D3EE]/40 bg-[#22D3EE]/10 text-[#22D3EE]';
 		if (label === 'MEDIUM') return 'border-amber-400/40 bg-amber-400/10 text-amber-400';
