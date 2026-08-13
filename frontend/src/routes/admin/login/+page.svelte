@@ -41,7 +41,7 @@
 </script>
 
 <svelte:head>
-	<title>Auth Handshake // Neuralwire</title>
+	<title>Auth Handshake | Neuralwire</title>
 </svelte:head>
 
 <div class="flex flex-grow items-center justify-center px-4 py-20">
@@ -82,7 +82,7 @@
 			<div
 				class="mb-6 animate-pulse rounded-lg border border-[#E11D48]/30 bg-[#E11D48]/5 p-3 text-center font-mono text-[11px] text-[#E11D48]"
 			>
-				ERROR // {errorMessage.toUpperCase()}
+				Error: {errorMessage}
 			</div>
 		{/if}
 

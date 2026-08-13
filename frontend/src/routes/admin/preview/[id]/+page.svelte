@@ -232,7 +232,9 @@
 </script>
 
 <svelte:head>
-	<title>{isEditing ? 'Editing: ' + editTitle : article?.title || 'Article Preview'} // System Admin</title>
+	<title
+		>{isEditing ? 'Editing: ' + editTitle : article?.title || 'Article Preview'} | System Admin</title
+	>
 </svelte:head>
 
 <section
@@ -342,56 +344,56 @@
 		<!-- Rich Text Editor formatting toolbar -->
 		{#if isEditing}
 			<div
-				class="sticky top-4 z-10 flex flex-wrap gap-1 rounded-xl bg-[#0b0f17]/95 p-2 border border-[rgba(255,255,255,0.08)] backdrop-blur shadow-2xl mb-6 items-center"
+				class="sticky top-4 z-10 mb-6 flex flex-wrap items-center gap-1 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0b0f17]/95 p-2 shadow-2xl backdrop-blur"
 			>
-				<span class="px-2 font-mono text-[10px] text-[#22D3EE] font-bold select-none uppercase"
+				<span class="px-2 font-mono text-[10px] font-bold text-[#22D3EE] uppercase select-none"
 					>WYSIWYG Toolbar:</span
 				>
 				<button
 					onclick={() => formatText('bold')}
-					class="px-3 py-1 font-sans text-xs font-bold text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs font-bold text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 					title="Bold">B</button
 				>
 				<button
 					onclick={() => formatText('italic')}
-					class="px-3 py-1 font-sans text-xs italic text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs text-slate-300 italic transition-colors hover:bg-slate-800 hover:text-white"
 					title="Italic">I</button
 				>
 				<button
 					onclick={() => formatText('underline')}
-					class="px-3 py-1 font-sans text-xs underline text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs text-slate-300 underline transition-colors hover:bg-slate-800 hover:text-white"
 					title="Underline">U</button
 				>
 				<span class="text-slate-700 select-none">|</span>
 				<button
 					onclick={() => formatText('formatBlock', 'H2')}
-					class="px-3 py-1 font-sans text-xs font-semibold text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 					title="Heading 2">H2</button
 				>
 				<button
 					onclick={() => formatText('formatBlock', 'H3')}
-					class="px-3 py-1 font-sans text-xs font-semibold text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 					title="Heading 3">H3</button
 				>
 				<button
 					onclick={() => formatText('formatBlock', 'p')}
-					class="px-3 py-1 font-sans text-xs text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 					title="Paragraph">P</button
 				>
 				<span class="text-slate-700 select-none">|</span>
 				<button
 					onclick={() => formatText('insertUnorderedList')}
-					class="px-3 py-1 font-sans text-xs text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 					title="Bullet List">&bull; List</button
 				>
 				<button
 					onclick={() => formatText('formatBlock', 'blockquote')}
-					class="px-3 py-1 font-sans text-xs italic text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-sans text-xs text-slate-300 italic transition-colors hover:bg-slate-800 hover:text-white"
 					title="Blockquote">&ldquo; Quote</button
 				>
 				<button
 					onclick={() => formatText('formatBlock', 'pre')}
-					class="px-3 py-1 font-mono text-xs text-slate-300 hover:text-white transition-colors rounded hover:bg-slate-800 cursor-pointer"
+					class="cursor-pointer rounded px-3 py-1 font-mono text-xs text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
 					title="Code Block">``` Code</button
 				>
 			</div>
@@ -405,7 +407,7 @@
 					<span
 						contenteditable="true"
 						bind:textContent={editCategory}
-						class="rounded border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-2 py-0.5 font-bold text-[#22D3EE] uppercase editable-field outline-none"
+						class="editable-field rounded border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-2 py-0.5 font-bold text-[#22D3EE] uppercase outline-none"
 					></span>
 				{:else}
 					<span
@@ -425,7 +427,7 @@
 				<h1
 					contenteditable="true"
 					bind:textContent={editTitle}
-					class="mb-4 font-serif text-2xl leading-tight font-medium text-white sm:text-3xl md:text-4xl outline-none editable-field"
+					class="editable-field mb-4 font-serif text-2xl leading-tight font-medium text-white outline-none sm:text-3xl md:text-4xl"
 				></h1>
 			{:else}
 				<h1
@@ -440,7 +442,7 @@
 				<p
 					contenteditable="true"
 					bind:textContent={editSummary}
-					class="mb-8 border-b border-[rgba(255,255,255,0.08)] pb-8 font-sans text-sm leading-relaxed font-light text-slate-300 md:text-base outline-none editable-field"
+					class="editable-field mb-8 border-b border-[rgba(255,255,255,0.08)] pb-8 font-sans text-sm leading-relaxed font-light text-slate-300 outline-none md:text-base"
 				></p>
 			{:else}
 				<p
@@ -453,11 +455,11 @@
 			<!-- Image URL editor in-place -->
 			{#if isEditing}
 				<div class="mb-6 rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/40 p-4">
-					<label class="block font-mono text-[10px] text-slate-400 mb-2">COVER IMAGE URL</label>
+					<label class="mb-2 block font-mono text-[10px] text-slate-400">COVER IMAGE URL</label>
 					<input
 						type="text"
 						bind:value={editImageURL}
-						class="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/60 px-3 py-2 font-sans text-xs text-white focus:border-[#22D3EE] focus:outline-none transition-colors mb-3"
+						class="mb-3 w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/60 px-3 py-2 font-sans text-xs text-white transition-colors focus:border-[#22D3EE] focus:outline-none"
 						placeholder="Paste cover image link..."
 					/>
 					<div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-[#0F172A]">
@@ -490,7 +492,7 @@
 				<div
 					contenteditable="true"
 					bind:innerHTML={editContent}
-					class="article-content max-w-none font-sans text-sm leading-relaxed font-light text-slate-300 md:text-base outline-none editable-field min-h-[300px]"
+					class="article-content editable-field min-h-[300px] max-w-none font-sans text-sm leading-relaxed font-light text-slate-300 outline-none md:text-base"
 				></div>
 			{:else}
 				<div
@@ -502,7 +504,8 @@
 						<div
 							class="rounded-lg border border-[#22D3EE]/20 bg-[#22D3EE]/5 p-4 font-mono text-xs text-[#22D3EE]"
 						>
-							// CURATOR MODE: original full text is not stored. AI digest below is the published brief.
+							Curator Mode: The original full text is not stored. The AI digest below is the
+							published brief.
 						</div>
 						<p class="mt-4 text-slate-200">{article.summary || 'No summary available.'}</p>
 					{/if}
@@ -584,7 +587,9 @@
 	/* WYSIWYG Editable Visual Indicators */
 	.editable-field {
 		border: 1px dashed transparent;
-		transition: border-color 0.2s ease, background-color 0.2s ease;
+		transition:
+			border-color 0.2s ease,
+			background-color 0.2s ease;
 		padding: 0.25rem;
 		border-radius: 0.5rem;
 	}

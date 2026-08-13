@@ -159,7 +159,7 @@
 	>
 		<div>
 			<span class="tag-mono mb-1 block text-xs font-bold tracking-widest text-[#22D3EE]"
-				>SYS // PUBLISHED_INDEX</span
+				>Published Index</span
 			>
 			<h1 class="font-serif text-3xl font-medium text-white">LIVE ARCHIVE</h1>
 		</div>

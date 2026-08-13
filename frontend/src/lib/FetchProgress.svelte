@@ -92,12 +92,12 @@
 {#if progress?.running}
 	<div class="mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#0F172A]/40 p-5 font-mono text-xs">
 		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-			<span class="font-bold tracking-widest text-[#22D3EE] uppercase animate-pulse"
-				>// FETCH_CYCLE_IN_PROGRESS</span
+			<span class="animate-pulse font-bold tracking-widest text-[#22D3EE] uppercase"
+				>Fetch Cycle in Progress</span
 			>
 			<span class="text-slate-300">
 				{progress.done_sources}/{progress.total_sources} SOURCES
-				<span class="ml-2 text-[#22D3EE] font-bold">{progress.percent}%</span>
+				<span class="ml-2 font-bold text-[#22D3EE]">{progress.percent}%</span>
 			</span>
 		</div>
 
@@ -109,7 +109,7 @@
 			></div>
 			<!-- Shimmer overlay -->
 			<div
-				class="absolute inset-0 w-1/3 animate-shimmer bg-gradient-to-r from-transparent via-white/30 to-transparent"
+				class="animate-shimmer absolute inset-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent"
 			></div>
 		</div>
 
@@ -120,7 +120,7 @@
 			</span>
 			<div class="flex items-center gap-3">
 				{#if cancelledToast}
-					<span class="text-amber-400 uppercase animate-pulse">cancellation requested…</span>
+					<span class="animate-pulse text-amber-400 uppercase">cancellation requested…</span>
 				{:else}
 					<span class="animate-pulse text-[#22D3EE]/70 uppercase">processing…</span>
 				{/if}

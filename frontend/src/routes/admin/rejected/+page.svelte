@@ -159,7 +159,7 @@
 	>
 		<div>
 			<span class="tag-mono mb-1 block text-xs font-bold tracking-widest text-[#22D3EE]"
-				>SYS // REJECTED_LOG</span
+				>Rejected Log</span
 			>
 			<h1 class="font-serif text-3xl font-medium text-white">BLOCKED INDEX</h1>
 		</div>

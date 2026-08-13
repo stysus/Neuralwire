@@ -329,10 +329,8 @@
 	}
 
 	function scoreClass(label: string) {
-		if (label === 'HIGH')
-			return 'border-[#22D3EE]/40 bg-[#22D3EE]/10 text-[#22D3EE]';
-		if (label === 'MEDIUM')
-			return 'border-amber-400/40 bg-amber-400/10 text-amber-400';
+		if (label === 'HIGH') return 'border-[#22D3EE]/40 bg-[#22D3EE]/10 text-[#22D3EE]';
+		if (label === 'MEDIUM') return 'border-amber-400/40 bg-amber-400/10 text-amber-400';
 		return 'border-slate-500/40 bg-slate-500/10 text-slate-400';
 	}
 
@@ -374,19 +372,21 @@
 <!-- Toast notification for finished fetch cycles -->
 {#if toast}
 	<div
-		class="fixed top-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border p-4 font-mono text-xs shadow-2xl animate-slide-in"
+		class="animate-slide-in fixed top-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border p-4 font-mono text-xs shadow-2xl"
 		style="border-color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; background: #0F172A;"
 	>
 		<div
 			class="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full"
-			style="background: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; box-shadow: 0 0 8px {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
+			style="background: {toast.type === 'success'
+				? '#22D3EE'
+				: '#E11D48'}; box-shadow: 0 0 8px {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
 		></div>
 		<div class="flex-grow space-y-1">
 			<div
-				class="font-bold uppercase tracking-widest"
+				class="font-bold tracking-widest uppercase"
 				style="color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
 			>
-				{toast.type === 'success' ? '// FETCH_COMPLETE' : '// FETCH_FAILED'}
+				{toast.type === 'success' ? 'Fetch Complete' : 'Fetch Failed'}
 			</div>
 			<div class="leading-relaxed text-slate-300">{toast.message}</div>
 		</div>
@@ -408,15 +408,20 @@
 	>
 		<div>
 			<span class="tag-mono mb-1 block text-xs font-bold tracking-widest text-[#22D3EE]"
-				>SYS // DRAFT_INVENTORY</span
+				>Draft Inventory</span
 			>
 			<h1 class="font-serif text-3xl font-medium text-white">QUEUE BUFFER</h1>
 		</div>
 		<div class="flex flex-col items-end gap-2 text-right">
 			<div class="space-y-0.5 font-mono text-[10px] text-slate-500">
-				<div>TOTAL_PENDING: <span class="font-bold text-slate-300">{totalItems}</span> RECORD(S)</div>
+				<div>
+					TOTAL_PENDING: <span class="font-bold text-slate-300">{totalItems}</span> RECORD(S)
+				</div>
 				{#if lastFetchInfo}
-					<div>LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span> <span class="text-slate-400">({lastFetchInfo.result})</span></div>
+					<div>
+						LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span>
+						<span class="text-slate-400">({lastFetchInfo.result})</span>
+					</div>
 				{/if}
 			</div>
 			<div class="flex flex-wrap items-center gap-3">
@@ -474,27 +479,31 @@
 
 	<!-- Scrape results feedback -->
 	{#if scrapeResult}
-		<div class="mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 p-4 text-center font-mono text-xs relative">
-			<button 
-				onclick={() => (scrapeResult = null)} 
-				class="absolute top-2 right-3 text-slate-500 hover:text-[#22D3EE] cursor-pointer"
+		<div
+			class="relative mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 p-4 text-center font-mono text-xs"
+		>
+			<button
+				onclick={() => (scrapeResult = null)}
+				class="absolute top-2 right-3 cursor-pointer text-slate-500 hover:text-[#22D3EE]"
 			>
 				[X]
 			</button>
-			<div class="font-bold text-[#22D3EE] uppercase mb-1">// SCRAPE_CYCLE_SUCCESS</div>
+			<div class="mb-1 font-bold text-[#22D3EE] uppercase">Scrape Cycle Success</div>
 			<div class="text-slate-300">{scrapeResult}</div>
 		</div>
 	{/if}
 
 	{#if scrapeError}
-		<div class="mb-6 rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 p-4 text-center font-mono text-xs relative">
-			<button 
-				onclick={() => (scrapeError = null)} 
-				class="absolute top-2 right-3 text-slate-500 hover:text-[#E11D48] cursor-pointer"
+		<div
+			class="relative mb-6 rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 p-4 text-center font-mono text-xs"
+		>
+			<button
+				onclick={() => (scrapeError = null)}
+				class="absolute top-2 right-3 cursor-pointer text-slate-500 hover:text-[#E11D48]"
 			>
 				[X]
 			</button>
-			<div class="font-bold text-[#E11D48] uppercase mb-1">// SCRAPE_CYCLE_FAILURE</div>
+			<div class="mb-1 font-bold text-[#E11D48] uppercase">Scrape Cycle Failure</div>
 			<div class="text-slate-400">{scrapeError}</div>
 		</div>
 	{/if}
@@ -549,7 +558,9 @@
 						</div>
 
 						<div class="flex-grow space-y-3">
-							<div class="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[10px] text-slate-500">
+							<div
+								class="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[10px] text-slate-500"
+							>
 								<span
 									class="rounded border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-1.5 py-0.5 font-bold text-[#22D3EE] uppercase"
 									>{item.category}</span
@@ -565,7 +576,9 @@
 								{@const bd = parseBreakdown(item)}
 								<div class="flex flex-wrap items-center gap-2 font-mono text-[10px]">
 									<span
-										class="rounded border px-2 py-0.5 font-bold uppercase {scoreClass(item.value_label)}"
+										class="rounded border px-2 py-0.5 font-bold uppercase {scoreClass(
+											item.value_label
+										)}"
 									>
 										{item.value_label || 'UNSCORED'} • {formatScore(item)}
 									</span>
@@ -585,7 +598,9 @@
 									{/if}
 								</div>
 								{#if item.value_reason}
-									<p class="max-w-4xl font-sans text-[11px] leading-relaxed font-light text-slate-500 italic">
+									<p
+										class="max-w-4xl font-sans text-[11px] leading-relaxed font-light text-slate-500 italic"
+									>
 										{formatReason(item)}
 									</p>
 								{/if}

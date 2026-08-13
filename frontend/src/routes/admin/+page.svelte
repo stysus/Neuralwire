@@ -20,9 +20,12 @@
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// Scoring thresholds (admin-configurable, backend persisted).
-	let thresholds = $state<{ low_max: number; medium_min: number; medium_max: number; high_min: number } | null>(
-		null
-	);
+	let thresholds = $state<{
+		low_max: number;
+		medium_min: number;
+		medium_max: number;
+		high_min: number;
+	} | null>(null);
 	let settingsSaving = $state(false);
 	let settingsSaved = $state(false);
 
@@ -208,19 +211,21 @@
 <!-- Toast notification for finished fetch cycles -->
 {#if toast}
 	<div
-		class="fixed top-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border p-4 font-mono text-xs shadow-2xl animate-slide-in"
+		class="animate-slide-in fixed top-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border p-4 font-mono text-xs shadow-2xl"
 		style="border-color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; background: #0F172A;"
 	>
 		<div
 			class="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full"
-			style="background: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; box-shadow: 0 0 8px {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
+			style="background: {toast.type === 'success'
+				? '#22D3EE'
+				: '#E11D48'}; box-shadow: 0 0 8px {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
 		></div>
 		<div class="flex-grow space-y-1">
 			<div
-				class="font-bold uppercase tracking-widest"
+				class="font-bold tracking-widest uppercase"
 				style="color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
 			>
-				{toast.type === 'success' ? '// FETCH_COMPLETE' : '// FETCH_FAILED'}
+				{toast.type === 'success' ? 'Fetch Complete' : 'Fetch Failed'}
 			</div>
 			<div class="leading-relaxed text-slate-300">{toast.message}</div>
 		</div>
@@ -242,7 +247,7 @@
 	>
 		<div>
 			<span class="tag-mono mb-1 block text-xs font-bold tracking-widest text-[#22D3EE]"
-				>SYSTEM // OVERVIEW</span
+				>System Overview</span
 			>
 			<h1 class="font-serif text-3xl font-medium text-white">TERMINAL CONTROL</h1>
 		</div>
@@ -251,7 +256,10 @@
 				<div>SYS_TIME: <span class="text-slate-300">{serverTime}</span></div>
 				<div>API_STATUS: <span class="font-bold text-[#22D3EE]">ONLINE</span></div>
 				{#if lastFetchInfo}
-					<div>LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span> <span class="text-slate-400">({lastFetchInfo.result})</span></div>
+					<div>
+						LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span>
+						<span class="text-slate-400">({lastFetchInfo.result})</span>
+					</div>
 				{/if}
 			</div>
 			<div>
@@ -317,27 +325,31 @@
 		<FetchProgress active={isScraping} />
 
 		{#if scrapeResult}
-			<div class="mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 p-4 text-center font-mono text-xs relative">
-				<button 
-					onclick={() => (scrapeResult = null)} 
-					class="absolute top-2 right-3 text-slate-500 hover:text-[#22D3EE] cursor-pointer"
+			<div
+				class="relative mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 p-4 text-center font-mono text-xs"
+			>
+				<button
+					onclick={() => (scrapeResult = null)}
+					class="absolute top-2 right-3 cursor-pointer text-slate-500 hover:text-[#22D3EE]"
 				>
 					[X]
 				</button>
-				<div class="font-bold text-[#22D3EE] uppercase mb-1">// SCRAPE_CYCLE_SUCCESS</div>
+				<div class="mb-1 font-bold text-[#22D3EE] uppercase">Scrape Cycle Success</div>
 				<div class="text-slate-300">{scrapeResult}</div>
 			</div>
 		{/if}
 
 		{#if scrapeError}
-			<div class="mb-6 rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 p-4 text-center font-mono text-xs relative">
-				<button 
-					onclick={() => (scrapeError = null)} 
-					class="absolute top-2 right-3 text-slate-500 hover:text-[#E11D48] cursor-pointer"
+			<div
+				class="relative mb-6 rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 p-4 text-center font-mono text-xs"
+			>
+				<button
+					onclick={() => (scrapeError = null)}
+					class="absolute top-2 right-3 cursor-pointer text-slate-500 hover:text-[#E11D48]"
 				>
 					[X]
 				</button>
-				<div class="font-bold text-[#E11D48] uppercase mb-1">// SCRAPE_CYCLE_FAILURE</div>
+				<div class="mb-1 font-bold text-[#E11D48] uppercase">Scrape Cycle Failure</div>
 				<div class="text-slate-400">{scrapeError}</div>
 			</div>
 		{/if}
@@ -353,7 +365,7 @@
 					class="absolute top-0 left-0 h-[1px] w-full bg-gradient-to-r from-transparent via-[#22D3EE]/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
 				></div>
 				<span class="mb-3 block font-mono text-[9px] tracking-widest text-[#22D3EE]/80 uppercase"
-					>// DRAFT_BUFFER</span
+					>Draft Buffer</span
 				>
 				<div class="flex items-baseline space-x-2">
 					<span class="font-serif text-4xl font-medium tracking-tight text-white sm:text-5xl"
@@ -378,7 +390,7 @@
 					class="absolute top-0 left-0 h-[1px] w-full bg-gradient-to-r from-transparent via-[#22D3EE]/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
 				></div>
 				<span class="mb-3 block font-mono text-[9px] tracking-widest text-[#22D3EE]/80 uppercase"
-					>// PUBLISHED_INDEX</span
+					>Published Index</span
 				>
 				<div class="flex items-baseline space-x-2">
 					<span class="font-serif text-4xl font-medium tracking-tight text-white sm:text-5xl"
@@ -403,7 +415,7 @@
 					class="absolute top-0 left-0 h-[1px] w-full bg-gradient-to-r from-transparent via-[#22D3EE]/30 to-transparent opacity-0 transition-opacity group-hover:opacity-100"
 				></div>
 				<span class="mb-3 block font-mono text-[9px] tracking-widest text-[#22D3EE]/80 uppercase"
-					>// REJECTED_LOG</span
+					>Rejected Log</span
 				>
 				<div class="flex items-baseline space-x-2">
 					<span class="font-serif text-4xl font-medium tracking-tight text-white sm:text-5xl"
@@ -424,7 +436,7 @@
 		<div
 			class="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/10 p-6 font-mono text-xs"
 		>
-			<span class="mb-4 block tracking-wider text-slate-500 uppercase">// CORE_QUICK_LINKS</span>
+			<span class="mb-4 block tracking-wider text-slate-500 uppercase">Core Quick Links</span>
 			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
 				<a
 					href="/admin/drafts"
@@ -463,9 +475,7 @@
 				class="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/10 p-6 font-mono text-xs"
 			>
 				<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
-					<span class="tracking-wider text-slate-500 uppercase">
-						// VALUE_SCORE_THRESHOLDS
-					</span>
+					<span class="tracking-wider text-slate-500 uppercase"> Value Score Thresholds </span>
 					{#if settingsSaved}
 						<span class="text-[#22D3EE]">SAVED ✓</span>
 					{/if}

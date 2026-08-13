@@ -57,6 +57,7 @@ You can preview the production build with `npm run preview`.
 - Removed the debug text `FILTER ACTIVE: INDEX_QUERY = "*"` from the category page.
 - Removed the `// CHRONICLE_INDEX` suffix from the CATEGORY header.
 - Removed the ` // RESOLVED_IMAGE` debug text suffix from the cover image source label on the article page.
+- Cleaned up tech-themed debug and double-slash snake_case labels in the admin panel.
 - Verified with `npm run check` (0 errors) and formatted with Prettier.
 
 ### 2026-08-13 — Trending / most-read articles (by Codex agent)
