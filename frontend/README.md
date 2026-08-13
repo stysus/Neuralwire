@@ -7,6 +7,8 @@ article detail pages and the admin moderation panel.
 ## Features
 
 - Public feed with category filters, search and per-article detail pages
+- **Responsive news grid**: 1 column (mobile) → 2 (tablet) → 3 (desktop) → 5
+  (very wide / 2xl) on the home, category and search pages
 - **Curator model article pages**: each story shows an AI digest summary plus
   a "READ FULL STORY" link to the original source (full text is never
   republished)
@@ -43,3 +45,22 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Recent changes
+
+### 2026-08-13 — Responsive 5-column grid (by Codex agent)
+
+- Home (`+page.svelte`), category (`category/[slug]/+page.svelte`) and search
+  (`search/+page.svelte`) news grids now render **5 columns on very wide
+  screens** via `2xl:grid-cols-5`. Mobile stays 1 column, tablet 2, desktop 3.
+- Verified with `npm run check` (0 errors).
+
+### Known open issues
+
+- 4 static images are missing and currently 404 in dev:
+  `/images/digital_ghost.jpg`, `/images/neuromancer_implants.jpg`,
+  `/images/digital_bots.jpg`, `/images/code_matrix.jpg` — decide whether to
+  restore the files or remove the references.
+- Pre-existing a11y warning (unrelated):
+  `admin/preview/[id]/+page.svelte:456` — the `COVER IMAGE URL` label is not
+  associated with its input (add `for` on the label + `id` on the input).
