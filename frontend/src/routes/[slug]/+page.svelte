@@ -246,7 +246,7 @@
 				src={article.image_url}
 				content={article.content}
 				alt={article.title}
-				class="h-full w-full object-cover opacity-90 grayscale"
+				class="h-full w-full object-cover opacity-90"
 			/>
 			<div
 				class="absolute bottom-4 left-4 rounded-lg border border-[rgba(255,255,255,0.05)] bg-[#0A0E17]/80 px-3 py-1.5 font-mono text-[10px] text-slate-400 backdrop-blur-sm"
@@ -455,7 +455,7 @@
 										src={post.image_url}
 										content={post.content}
 										alt={post.title}
-										class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+										class="h-full w-full object-cover opacity-75 transition-all duration-550 group-hover:scale-105 group-hover:opacity-100"
 									/>
 								</a>
 

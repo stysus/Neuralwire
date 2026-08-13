@@ -123,7 +123,7 @@
 							src={post.image_url}
 							content={post.content}
 							alt={post.title}
-							class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+							class="h-full w-full object-cover opacity-75 transition-all duration-550 group-hover:scale-105 group-hover:opacity-100"
 						/>
 					</a>
 

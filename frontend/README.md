@@ -52,6 +52,24 @@ You can preview the production build with `npm run preview`.
 
 ## Recent changes
 
+### 2026-08-14 — Full-color article images everywhere (STY-25)
+
+- Removed the `grayscale` / `group-hover:grayscale-0` classes from all news
+  images on the home (`+page.svelte`), category, search and admin
+  (drafts/published/rejected) pages, so every article image displays in full
+  color. Hover effects (`group-hover:scale-105`, `group-hover:opacity-100`,
+  transitions) are preserved.
+- Verified with `npm run check` (0 errors, 0 warnings).
+
+### 2026-08-14 — Color article images on detail pages (STY-24)
+
+- Removed the `grayscale` / `group-hover:grayscale-0` classes from article
+  images in `frontend/src/routes/[slug]/+page.svelte` (the detail page shown
+  when a story is opened), so the cover and related-article images display in
+  their original colors. Grayscale styling on the home, category, search and
+  admin pages is unchanged.
+- Verified with `npm run check` (0 errors, 0 warnings).
+
 ### 2026-08-14 — Fixed a11y label warning (STY-17)
 
 - Associated the `COVER IMAGE URL` label with its input in the admin preview

@@ -204,7 +204,7 @@
 								src={featuredArticle.image_url}
 								content={featuredArticle.content}
 								alt={featuredArticle.title}
-								class="h-full w-full object-cover opacity-90 grayscale transition-all duration-700 group-hover:opacity-100 group-hover:grayscale-0"
+								class="h-full w-full object-cover opacity-90 transition-all duration-700 group-hover:opacity-100"
 							/>
 							<div
 								class="absolute inset-0 bg-gradient-to-t from-[#0A0E17] via-transparent to-transparent opacity-40"
@@ -327,7 +327,7 @@
 							src={post.image_url}
 							content={post.content}
 							alt={post.title}
-							class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+							class="h-full w-full object-cover opacity-75 transition-all duration-550 group-hover:scale-105 group-hover:opacity-100"
 						/>
 						<div class="absolute bottom-2 left-2">
 							<span
