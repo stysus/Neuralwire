@@ -111,7 +111,9 @@ func (r *NewsRepository) ListPublished(category, query string, page, pageSize in
 		var conds []string
 		for _, tok := range tokens {
 			like := "%" + tok + "%"
-			conds = append(conds, `(LOWER(title) LIKE ? OR LOWER(summary) LIKE ?)`)
+			// SQLite LIKE is already case-insensitive for ASCII, so no
+			// LOWER() is needed here (it would also defeat any index use).
+			conds = append(conds, `(title LIKE ? OR summary LIKE ?)`)
 			args = append(args, like, like)
 		}
 		if len(conds) > 0 {

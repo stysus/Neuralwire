@@ -29,6 +29,26 @@ CREATE INDEX IF NOT EXISTS idx_news_status_published_at
 CREATE INDEX IF NOT EXISTS idx_news_category_status
     ON news (category, status);
 
+-- Public list with category filter sorts by published_at; include it in the
+-- composite so SQLite can satisfy the ORDER BY from the index.
+CREATE INDEX IF NOT EXISTS idx_news_category_status_published
+    ON news (category, status, published_at DESC);
+
+-- Admin list orders by created_at; a dedicated index avoids a full scan and
+-- temp sort even when filtering by status.
+CREATE INDEX IF NOT EXISTS idx_news_created_at
+    ON news (created_at DESC);
+
+-- Admin list with status filter orders by created_at DESC; this composite
+-- lets SQLite satisfy both the filter and the sort from one index.
+CREATE INDEX IF NOT EXISTS idx_news_status_created_at
+    ON news (status, created_at DESC);
+
+-- ExistsByURL runs once per feed item during every fetch cycle; without an
+-- index this is a full table scan on each call.
+CREATE INDEX IF NOT EXISTS idx_news_url
+    ON news (url);
+
 CREATE TABLE IF NOT EXISTS rss_sources (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     name            TEXT    NOT NULL,
@@ -61,6 +81,11 @@ CREATE TABLE IF NOT EXISTS article_views (
 
 CREATE INDEX IF NOT EXISTS idx_article_views_news
     ON article_views (news_id, created_at);
+
+-- RecordView dedup looks up (news_id, viewer_key, created_at > cutoff);
+-- the viewer_key column makes the look-up selective.
+CREATE INDEX IF NOT EXISTS idx_article_views_news_viewer
+    ON article_views (news_id, viewer_key, created_at);
 `
 
 // scoringColumns are added to the news table when it already exists from an

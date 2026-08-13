@@ -58,6 +58,11 @@ English by default).
   `GET /api/metrics` exposes Prometheus counters (requests by method/status,
   error count, latency sum/count, fetch cycles, AI calls). Both endpoints are
   exempt from rate limiting and never cached
+- **Database indexes** covering the hot paths: `news(url)` (per-item dedup
+  during fetch), `news(status, created_at)` (admin list), `news(category,
+  status, published_at)` (public category list), and
+  `article_views(news_id, viewer_key, created_at)` (view dedup). Verified
+  with `EXPLAIN QUERY PLAN` — hot queries use covering indexes
 
 ## Requirements
 
