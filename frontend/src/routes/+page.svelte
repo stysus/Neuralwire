@@ -1,16 +1,21 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import type { News } from '$lib/mockData';
 	import Image from '$lib/Image.svelte';
+	import TrendingNews from '$lib/TrendingNews.svelte';
 
 	let { data }: { data: PageData } = $props();
 
 	// Active category filter (for the grid, leaving the hero as the absolute latest)
 	let activeCategory = $state('all');
+	let heroIndex = $state(0);
+	let isHeroPaused = $state(false);
 
 	// Compute filtered news for the feed grid
 	const articles = $derived(data.news as News[]);
-	const featuredArticle = $derived(articles[0]);
+	const heroArticles = $derived(articles.slice(0, 5));
+	const featuredArticle = $derived(heroArticles[heroIndex] ?? articles[0]);
 	const feedArticles = $derived(articles.slice(1));
 
 	const filteredFeed = $derived(
@@ -44,12 +49,46 @@
 		const found = data.categories?.find((c: any) => c.slug === slug);
 		return found ? found.name : slug.replace('-', ' ');
 	}
+
+	function selectHero(index: number) {
+		if (heroArticles.length === 0) return;
+		heroIndex = (index + heroArticles.length) % heroArticles.length;
+	}
+
+	function nextHero() {
+		selectHero(heroIndex + 1);
+	}
+
+	function previousHero() {
+		selectHero(heroIndex - 1);
+	}
+
+	$effect(() => {
+		if (heroIndex >= heroArticles.length) {
+			heroIndex = 0;
+		}
+	});
+
+	onMount(() => {
+		const interval = window.setInterval(() => {
+			if (!isHeroPaused && heroArticles.length > 1) {
+				nextHero();
+			}
+		}, 6500);
+
+		return () => window.clearInterval(interval);
+	});
 </script>
 
 <!-- Hero Section -->
 {#if featuredArticle}
 	<section
 		class="relative overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#080B12]/80 py-12 md:py-20 lg:py-24"
+		aria-label="Featured articles"
+		onmouseenter={() => (isHeroPaused = true)}
+		onmouseleave={() => (isHeroPaused = false)}
+		onfocusin={() => (isHeroPaused = true)}
+		onfocusout={() => (isHeroPaused = false)}
 	>
 		<!-- Subtle light beam behind hero -->
 		<div
@@ -57,102 +96,166 @@
 		></div>
 
 		<div class="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-			<div class="grid grid-cols-1 items-center gap-8 lg:grid-cols-12 lg:gap-12">
-				<!-- Hero Text Details -->
-				<div class="flex flex-col space-y-4 md:space-y-6 lg:col-span-7">
-					<!-- Category and Meta -->
-					<div class="flex items-center space-x-3 text-xs">
-						<a
-							href="/category/{featuredArticle.category}"
-							class="tag-mono rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-2 py-0.5 font-bold text-[#22D3EE] transition-colors hover:bg-[#22D3EE]/10"
-						>
-							{getCategoryName(featuredArticle.category)}
-						</a>
-						<span class="font-mono text-slate-500">•</span>
-						<span class="font-mono text-slate-400">{formatDate(featuredArticle.published_at)}</span>
-						<span class="font-mono text-slate-500">•</span>
-						<span class="font-mono text-slate-400">{getReadingTime(featuredArticle.summary)}</span>
-					</div>
-
-					<!-- Hero Headline -->
-					<a href="/{featuredArticle.slug}" class="group">
-						<h1
-							class="font-serif text-3xl leading-tight font-medium tracking-tight text-white transition-colors group-hover:text-[#22D3EE]/90 sm:text-4xl md:text-5xl lg:text-6xl"
-						>
-							{featuredArticle.title}
-						</h1>
-					</a>
-
-					<!-- Hero Summary -->
-					<p
-						class="max-w-2xl font-sans text-sm leading-relaxed font-light text-slate-400 md:text-base"
-					>
-						{featuredArticle.summary}
-					</p>
-
-					<!-- Author / Source and Call to Action -->
-					<div
-						class="flex items-center justify-between border-t border-[rgba(255,255,255,0.05)] pt-4"
-					>
-						<div class="flex items-center space-x-2">
-							<div
-								class="flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(255,255,255,0.1)] bg-[#0F172A] font-mono text-[10px] text-slate-400 uppercase"
+			{#key featuredArticle.id}
+				<div class="hero-slide grid grid-cols-1 items-center gap-8 lg:grid-cols-12 lg:gap-12">
+					<!-- Hero Text Details -->
+					<div class="flex flex-col space-y-4 md:space-y-6 lg:col-span-7">
+						<!-- Category and Meta -->
+						<div class="flex flex-wrap items-center gap-3 text-xs">
+							<a
+								href="/category/{featuredArticle.category}"
+								class="tag-mono rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-2 py-0.5 font-bold text-[#22D3EE] transition-colors hover:bg-[#22D3EE]/10"
 							>
-								NW
-							</div>
-							<div>
-								<p class="text-xs font-semibold text-slate-200">{featuredArticle.source}</p>
-								<p class="font-mono text-[10px] text-slate-500">CORRESPONDENT</p>
-							</div>
+								{getCategoryName(featuredArticle.category)}
+							</a>
+							<span class="font-mono text-slate-500">•</span>
+							<span class="font-mono text-slate-400">{formatDate(featuredArticle.published_at)}</span>
+							<span class="font-mono text-slate-500">•</span>
+							<span class="font-mono text-slate-400">{getReadingTime(featuredArticle.summary)}</span>
 						</div>
 
-						<a
-							href="/{featuredArticle.slug}"
-							class="group inline-flex items-center space-x-2 rounded-lg border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-4 py-2 font-mono text-xs text-[#22D3EE] transition-all duration-300 hover:border-[#22D3EE]/50 hover:bg-[#22D3EE]/10 hover:text-white"
-						>
-							<span>READ FULL BRIEF</span>
-							<svg
-								class="h-3.5 w-3.5 transform transition-transform group-hover:translate-x-1"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
+						<!-- Hero Headline -->
+						<a href="/{featuredArticle.slug}" class="group">
+							<h1
+								class="font-serif text-3xl leading-tight font-medium tracking-tight text-white transition-colors group-hover:text-[#22D3EE]/90 sm:text-4xl md:text-5xl lg:text-6xl"
 							>
+								{featuredArticle.title}
+							</h1>
+						</a>
+
+						<!-- Hero Summary -->
+						<p
+							class="max-w-2xl font-sans text-sm leading-relaxed font-light text-slate-400 md:text-base"
+						>
+							{featuredArticle.summary}
+						</p>
+
+						<!-- Author / Source and Call to Action -->
+						<div
+							class="flex flex-col gap-4 border-t border-[rgba(255,255,255,0.05)] pt-4 sm:flex-row sm:items-center sm:justify-between"
+						>
+							<div class="flex items-center space-x-2">
+								<div
+									class="flex h-8 w-8 items-center justify-center rounded-full border border-[rgba(255,255,255,0.1)] bg-[#0F172A] font-mono text-[10px] text-slate-400 uppercase"
+								>
+									NW
+								</div>
+								<div>
+									<p class="text-xs font-semibold text-slate-200">{featuredArticle.source}</p>
+									<p class="font-mono text-[10px] text-slate-500">CORRESPONDENT</p>
+								</div>
+							</div>
+
+							<a
+								href="/{featuredArticle.slug}"
+								class="group inline-flex items-center justify-center space-x-2 rounded-lg border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-4 py-2 font-mono text-xs text-[#22D3EE] transition-all duration-300 hover:border-[#22D3EE]/50 hover:bg-[#22D3EE]/10 hover:text-white"
+							>
+								<span>READ FULL BRIEF</span>
+								<svg
+									class="h-3.5 w-3.5 transform transition-transform group-hover:translate-x-1"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M14 5l7 7m0 0l-7 7m7-7H3"
+									/>
+								</svg>
+							</a>
+						</div>
+					</div>
+
+					<!-- Hero Visual -->
+					<div class="group relative lg:col-span-5">
+						<!-- Glow underlying background -->
+						<div
+							class="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-500/20 to-purple-500/10 opacity-30 blur-xl transition duration-1000 group-hover:opacity-50 group-hover:duration-200"
+						></div>
+
+						<div
+							class="relative aspect-[4/3] w-full scale-[0.99] overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A] transition-all duration-500 group-hover:scale-100"
+						>
+							<Image
+								src={featuredArticle.image_url}
+								content={featuredArticle.content}
+								alt={featuredArticle.title}
+								class="h-full w-full object-cover opacity-90 grayscale transition-all duration-700 group-hover:opacity-100 group-hover:grayscale-0"
+							/>
+							<div
+								class="absolute inset-0 bg-gradient-to-t from-[#0A0E17] via-transparent to-transparent opacity-40"
+							></div>
+						</div>
+					</div>
+				</div>
+			{/key}
+
+			{#if heroArticles.length > 1}
+				<div
+					class="mt-8 flex flex-col gap-4 border-t border-[rgba(255,255,255,0.06)] pt-5 sm:flex-row sm:items-center sm:justify-between"
+				>
+					<div class="flex items-center gap-3">
+						<button
+							type="button"
+							onclick={previousHero}
+							class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#0F172A]/50 text-slate-400 transition-all hover:border-[#22D3EE]/40 hover:bg-[#22D3EE]/5 hover:text-[#22D3EE]"
+							aria-label="Previous featured article"
+							title="Previous"
+						>
+							<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
 									stroke-width="2"
-									d="M14 5l7 7m0 0l-7 7m7-7H3"
+									d="M15 19l-7-7 7-7"
 								/>
 							</svg>
-						</a>
+						</button>
+						<button
+							type="button"
+							onclick={nextHero}
+							class="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-[#0F172A]/50 text-slate-400 transition-all hover:border-[#22D3EE]/40 hover:bg-[#22D3EE]/5 hover:text-[#22D3EE]"
+							aria-label="Next featured article"
+							title="Next"
+						>
+							<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M9 5l7 7-7 7"
+								/>
+							</svg>
+						</button>
+					</div>
+
+					<div class="flex items-center gap-4 sm:justify-end">
+						<div class="flex items-center gap-2">
+							{#each heroArticles as item, index}
+								<button
+									type="button"
+									onclick={() => selectHero(index)}
+									class="h-2.5 rounded-full transition-all {index === heroIndex
+										? 'w-8 bg-[#22D3EE]'
+										: 'w-2.5 bg-slate-700 hover:bg-slate-500'}"
+									aria-label="Show featured article {index + 1}: {item.title}"
+									aria-current={index === heroIndex ? 'true' : undefined}
+								></button>
+							{/each}
+						</div>
+						<div class="font-mono text-[10px] tracking-widest text-slate-500">
+							{String(heroIndex + 1).padStart(2, '0')} / {String(heroArticles.length).padStart(2, '0')}
+						</div>
 					</div>
 				</div>
-
-				<!-- Hero Visual -->
-				<div class="group relative lg:col-span-5">
-					<!-- Glow underlying background -->
-					<div
-						class="absolute -inset-1 rounded-2xl bg-gradient-to-r from-cyan-500/20 to-purple-500/10 opacity-30 blur-xl transition duration-1000 group-hover:opacity-50 group-hover:duration-200"
-					></div>
-
-					<div
-						class="relative aspect-[4/3] w-full scale-[0.99] overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A] transition-all duration-500 group-hover:scale-100"
-					>
-						<Image
-							src={featuredArticle.image_url}
-							content={featuredArticle.content}
-							alt={featuredArticle.title}
-							class="h-full w-full object-cover opacity-90 grayscale transition-all duration-700 group-hover:opacity-100 group-hover:grayscale-0"
-						/>
-						<div
-							class="absolute inset-0 bg-gradient-to-t from-[#0A0E17] via-transparent to-transparent opacity-40"
-						></div>
-					</div>
-				</div>
-			</div>
+			{/if}
 		</div>
 	</section>
 {/if}
+
+<TrendingNews />
 
 <!-- News Feed Section -->
 <section class="mx-auto max-w-7xl px-4 py-12 sm:px-6 md:py-16 lg:px-8">
@@ -283,3 +386,20 @@
 		</div>
 	{/if}
 </section>
+
+<style>
+	.hero-slide {
+		animation: hero-slide-in 520ms ease-out both;
+	}
+
+	@keyframes hero-slide-in {
+		from {
+			opacity: 0;
+			transform: translateX(1.25rem);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
+	}
+</style>

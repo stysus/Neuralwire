@@ -5,12 +5,14 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"neuralwire/backend/internal/models"
+	"neuralwire/backend/internal/repository"
 )
 
 const (
@@ -96,6 +98,67 @@ func (s *Server) handleGetNews(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, news)
+}
+
+// handleTrendingNews returns the most-viewed published articles for the
+// requested window (?window=day|week|all, default week) and limit
+// (?limit=, default 5). Public endpoint.
+func (s *Server) handleTrendingNews(w http.ResponseWriter, r *http.Request) {
+	window := repository.TrendingWindow(strings.TrimSpace(r.URL.Query().Get("window")))
+	switch window {
+	case repository.TrendingDay, repository.TrendingWeek, repository.TrendingAll:
+	default:
+		window = repository.TrendingWeek
+	}
+
+	limit := 5
+	if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	news, err := s.newsRepo.ListTrending(window, limit)
+	if err != nil {
+		s.logger.Printf("api: trending news: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to load trending news")
+		return
+	}
+	if news == nil {
+		news = []models.News{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{
+		"window": window,
+		"data":   news,
+	})
+}
+
+// handleRecordView counts one read of a published article. It accepts an
+// optional JSON body {viewer_key} for per-visitor deduplication. The
+// response is always 200 {ok:true} so the frontend tracking call is a
+// fire-and-forget; recording errors are logged, not surfaced.
+func (s *Server) handleRecordView(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid news id")
+		return
+	}
+
+	var body struct {
+		ViewerKey string `json:"viewer_key"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
+	}
+	body.ViewerKey = strings.TrimSpace(body.ViewerKey)
+	if len(body.ViewerKey) > 128 {
+		body.ViewerKey = body.ViewerKey[:128]
+	}
+
+	if err := s.newsRepo.RecordView(id, body.ViewerKey); err != nil {
+		s.logger.Printf("api: record view for %d: %v", id, err)
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleListCategories(w http.ResponseWriter, r *http.Request) {

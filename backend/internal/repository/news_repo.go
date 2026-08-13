@@ -250,6 +250,135 @@ func (r *NewsRepository) DeleteByStatus(status string) error {
 	return nil
 }
 
+// viewCooldown bounds how often the same viewer can count as a new read for
+// the same article, so refreshes or accidental re-opens don't inflate views.
+const viewCooldown = 6 * time.Hour
+
+// RecordView counts a read of an article. A viewer_key (client-generated id)
+// combined with the cooldown window deduplicates views per visitor. It is a
+// no-op when the article does not exist.
+func (r *NewsRepository) RecordView(newsID int64, viewerKey string) error {
+	var exists int
+	if err := r.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM news WHERE id = ?)`, newsID).Scan(&exists); err != nil {
+		return fmt.Errorf("exists news for view: %w", err)
+	}
+	if exists == 0 {
+		return nil
+	}
+
+	if viewerKey != "" {
+		// Only count once per viewer per cooldown window. Both sides are
+		// normalized to UTC RFC3339 so SQLite's string comparison is correct.
+		var recent int
+		err := r.db.QueryRow(`
+			SELECT EXISTS(
+				SELECT 1 FROM article_views
+				WHERE news_id = ? AND viewer_key = ? AND created_at > ?
+			)`,
+			newsID, viewerKey, time.Now().UTC().Add(-viewCooldown).Format(time.RFC3339),
+		).Scan(&recent)
+		if err != nil {
+			return fmt.Errorf("check recent view: %w", err)
+		}
+		if recent == 1 {
+			return nil
+		}
+	}
+
+	if _, err := r.db.Exec(
+		`INSERT INTO article_views (news_id, viewer_key, created_at) VALUES (?, ?, ?)`,
+		newsID, viewerKey, time.Now().UTC().Format(time.RFC3339),
+	); err != nil {
+		return fmt.Errorf("insert article view: %w", err)
+	}
+	return nil
+}
+
+// TrendingWindow selects the time range for trending rankings.
+type TrendingWindow string
+
+const (
+	TrendingDay  TrendingWindow = "day"
+	TrendingWeek TrendingWindow = "week"
+	TrendingAll  TrendingWindow = "all"
+)
+
+// ListTrending returns the most-viewed published articles in the given time
+// window, ordered by view count descending then newest first. Limit is
+// clamped to 1-50.
+func (r *NewsRepository) ListTrending(window TrendingWindow, limit int) ([]models.News, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	// published_at is in UTC RFC3339; article_views.created_at is the same.
+	where := ""
+	args := []any{}
+	switch window {
+	case TrendingDay:
+		where = `AND av.created_at > ?`
+		args = append(args, time.Now().UTC().Add(-24*time.Hour).Format(time.RFC3339))
+	case TrendingWeek:
+		where = `AND av.created_at > ?`
+		args = append(args, time.Now().UTC().Add(-7*24*time.Hour).Format(time.RFC3339))
+	}
+
+	query := `
+		SELECT n.id, n.title, n.slug, n.url, n.source, n.category, n.summary,
+			n.content, n.image_url, n.status, n.published_at, n.created_at,
+			n.value_score, n.value_breakdown, n.value_confidence, n.value_recommendation,
+			n.value_reason, n.value_label, n.value_method,
+			COUNT(av.id) AS view_count
+		FROM news n
+		JOIN article_views av ON av.news_id = n.id
+		WHERE n.status = ? ` + where + `
+		GROUP BY n.id
+		ORDER BY view_count DESC, n.published_at DESC, n.id DESC
+		LIMIT ?`
+	args = append([]any{string(models.StatusPublished)}, args...)
+	args = append(args, limit)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list trending: %w", err)
+	}
+	defer rows.Close()
+
+	var news []models.News
+	for rows.Next() {
+		var n models.News
+		var status string
+		var publishedAt sql.NullString
+		var createdAt string
+		if err := rows.Scan(
+			&n.ID, &n.Title, &n.Slug, &n.URL, &n.Source, &n.Category,
+			&n.Summary, &n.Content, &n.ImageURL, &status, &publishedAt, &createdAt,
+			&n.ValueScore, &n.ValueBreakdown, &n.ValueConfidence, &n.ValueRecommendation,
+			&n.ValueReason, &n.ValueLabel, &n.ValueMethod,
+			&n.ViewCount,
+		); err != nil {
+			return nil, fmt.Errorf("scan trending: %w", err)
+		}
+		n.Status = models.NewsStatus(status)
+		if publishedAt.Valid {
+			if t, err := parseSQLiteTime(publishedAt.String); err == nil {
+				n.PublishedAt = &t
+			}
+		}
+		if t, err := parseSQLiteTime(createdAt); err == nil {
+			n.CreatedAt = t
+		}
+		news = append(news, n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate trending: %w", err)
+	}
+	return news, nil
+}
+
 // scanner is satisfied by *sql.Row and *sql.Rows.
 type scanner interface {
 	Scan(dest ...any) error

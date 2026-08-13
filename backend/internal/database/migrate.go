@@ -51,6 +51,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value      TEXT NOT NULL DEFAULT '',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS article_views (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    news_id    INTEGER NOT NULL,
+    viewer_key TEXT    NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_article_views_news
+    ON article_views (news_id, created_at);
 `
 
 // scoringColumns are added to the news table when it already exists from an

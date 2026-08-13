@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
 
 	"neuralwire/backend/internal/auth"
@@ -669,5 +671,83 @@ func TestSettingsEndpoints(t *testing.T) {
 	// Requires auth
 	if rec := doJSON(t, s, http.MethodGet, "/api/admin/settings", nil); rec.Code != http.StatusUnauthorized {
 		t.Errorf("get settings without token = %d, want 401", rec.Code)
+	}
+}
+
+// createPublishedArticle creates a draft then publishes it via the admin API.
+func createPublishedArticle(t *testing.T, s *Server, token string, title string) models.News {
+	t.Helper()
+	create := doJSONAs(t, s, http.MethodPost, "/api/admin/news", map[string]any{
+		"title":    title,
+		"url":      "https://example.com/" + strings.ReplaceAll(title, " ", "-"),
+		"source":   "OpenAI Blog",
+		"category": "ai",
+		"summary":  "A test summary.",
+	}, token)
+	if create.Code != http.StatusCreated {
+		t.Fatalf("create status = %d, want 201 (body: %s)", create.Code, create.Body.String())
+	}
+	created := decodeNews(t, create)
+	pub := doJSONAs(t, s, http.MethodPost, "/api/admin/news/"+strconv.FormatInt(created.ID, 10)+"/publish", nil, token)
+	if pub.Code != http.StatusOK {
+		t.Fatalf("publish status = %d, want 200", pub.Code)
+	}
+	return created
+}
+
+func TestRecordViewAndTrending(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	a := createPublishedArticle(t, s, token, "Trending Article A")
+	b := createPublishedArticle(t, s, token, "Trending Article B")
+
+	// Record several views: A gets 3 distinct viewers, B gets 1.
+	for i := 0; i < 3; i++ {
+		rec := doJSON(t, s, http.MethodPost,
+			"/api/news/"+strconv.FormatInt(a.ID, 10)+"/view",
+			map[string]string{"viewer_key": "viewer-" + strconv.Itoa(i)})
+		if rec.Code != http.StatusOK {
+			t.Fatalf("record view A status = %d, want 200", rec.Code)
+		}
+	}
+	// Same viewer twice -> deduped to one view.
+	rec := doJSON(t, s, http.MethodPost, "/api/news/"+strconv.FormatInt(a.ID, 10)+"/view", map[string]string{"viewer_key": "viewer-0"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("record dup view status = %d, want 200", rec.Code)
+	}
+	rec = doJSON(t, s, http.MethodPost, "/api/news/"+strconv.FormatInt(b.ID, 10)+"/view", map[string]string{"viewer_key": "viewer-x"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("record view B status = %d, want 200", rec.Code)
+	}
+
+	// Trending all time: A (3) should rank above B (1).
+	tr := doJSON(t, s, http.MethodGet, "/api/news/trending?window=all&limit=5", nil)
+	if tr.Code != http.StatusOK {
+		t.Fatalf("trending status = %d, want 200", tr.Code)
+	}
+	var resp struct {
+		Data []models.News `json:"data"`
+	}
+	if err := json.Unmarshal(tr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode trending: %v", err)
+	}
+	if len(resp.Data) != 2 {
+		t.Fatalf("trending len = %d, want 2", len(resp.Data))
+	}
+	if resp.Data[0].ID != a.ID {
+		t.Errorf("trending[0].ID = %d, want %d (most viewed first)", resp.Data[0].ID, a.ID)
+	}
+	if resp.Data[0].ViewCount != 3 {
+		t.Errorf("trending[0].ViewCount = %d, want 3", resp.Data[0].ViewCount)
+	}
+	if resp.Data[1].ViewCount != 1 {
+		t.Errorf("trending[1].ViewCount = %d, want 1", resp.Data[1].ViewCount)
+	}
+
+	// View on a nonexistent id is a silent no-op (200 ok).
+	rec = doJSON(t, s, http.MethodPost, "/api/news/99999/view", map[string]string{"viewer_key": "x"})
+	if rec.Code != http.StatusOK {
+		t.Errorf("record view missing article status = %d, want 200", rec.Code)
 	}
 }

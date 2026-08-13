@@ -85,6 +85,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/health", s.handleHealth)
 	mux.HandleFunc("GET /api/news", s.handleListNews)
 	mux.HandleFunc("GET /api/news/{id}", s.handleGetNews)
+	mux.HandleFunc("GET /api/news/trending", s.handleTrendingNews)
+	mux.HandleFunc("POST /api/news/{id}/view", s.handleRecordView)
 	mux.HandleFunc("GET /api/categories", s.handleListCategories)
 
 	// Admin login is public; every other /api/admin/* route is protected.

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import type { PageData } from './$types';
 	import type { News } from '$lib/mockData';
 	import Image from '$lib/Image.svelte';
@@ -36,6 +37,30 @@
 			email = '';
 		}
 	}
+
+	function getViewerKey() {
+		const existing = localStorage.getItem('nw_viewer_id');
+		if (existing) return existing;
+
+		const generated =
+			typeof crypto !== 'undefined' && 'randomUUID' in crypto
+				? crypto.randomUUID()
+				: `nw-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+		localStorage.setItem('nw_viewer_id', generated);
+		return generated;
+	}
+
+	onMount(() => {
+		const viewerKey = getViewerKey();
+		fetch(`http://localhost:8080/api/news/${article.id}/view`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ viewer_key: viewerKey })
+		}).catch((error) => {
+			console.warn('view tracking failed', error);
+		});
+	});
 </script>
 
 <svelte:head>

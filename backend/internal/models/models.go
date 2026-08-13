@@ -47,6 +47,10 @@ type News struct {
 	ValueReason         string  `json:"value_reason"`
 	ValueLabel          string  `json:"value_label"`
 	ValueMethod         string  `json:"value_method"`
+	// ViewCount is the number of recorded reads/views. It is populated only
+	// for trending endpoints (computed from article_views), not stored on
+	// the news row itself.
+	ViewCount int `json:"view_count"`
 }
 
 // ScoreThresholds are the configurable bounds for the HIGH/MEDIUM/LOW

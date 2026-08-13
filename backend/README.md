@@ -31,6 +31,10 @@ English by default).
   refreshes, plus **cancel in-flight fetch** (`POST /api/admin/fetch/cancel`)
 - Cover images are upgraded to high-resolution CDN variants (Contentful,
   imgix, Cloudinary, Unsplash, Google, WordPress) so heroes render sharply
+- **Trending / most-read ranking**: public `POST /api/news/{id}/view` records
+  article reads (deduplicated per visitor via `viewer_key` + 6h cooldown) and
+  `GET /api/news/trending?window=day|week|all&limit=N` returns the most-read
+  published articles with view counts
 - CORS enabled for `http://localhost:5173` and `http://127.0.0.1:5173` (SvelteKit dev server)
 - Admin API protected by simple bearer-token auth (`POST /api/admin/login`)
 
@@ -174,6 +178,8 @@ envelope.
 | GET    | `/api/health`       | Liveness check                                     |
 | GET    | `/api/news`         | Published articles; `?category=`, `?page=`, `?page_size=` |
 | GET    | `/api/news/{id}`    | Single published article (404 if draft/rejected)   |
+| GET    | `/api/news/trending`| Most-read published articles; `?window=day\|week\|all` (default week), `?limit=` (default 5) |
+| POST   | `/api/news/{id}/view` | Record one read of an article; optional body `{viewer_key}` for per-visitor dedup |
 | GET    | `/api/categories`   | All categories                                     |
 
 ### Admin (moderation workflow)

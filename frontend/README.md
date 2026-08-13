@@ -7,6 +7,10 @@ article detail pages and the admin moderation panel.
 ## Features
 
 - Public feed with category filters, search and per-article detail pages
+- **Trending / most-read** section on the homepage: a `TrendingNews.svelte`
+  ranking of the top-5 most-read articles this week (view counts tracked via
+  `POST /api/news/{id}/view` fired when an article page opens, deduplicated
+  per browser via a localStorage `nw_viewer_id`)
 - **Responsive news grid**: 1 column (mobile) → 2 (tablet) → 3 (desktop) → 5
   (very wide / 2xl) on the home, category and search pages
 - **Curator model article pages**: each story shows an AI digest summary plus
@@ -47,6 +51,16 @@ You can preview the production build with `npm run preview`.
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
 
 ## Recent changes
+
+### 2026-08-13 — Trending / most-read articles (by Codex agent)
+
+- New `TrendingNews.svelte` component fetching
+  `GET /api/news/trending?window=week&limit=5`, rendered on the homepage
+  (ranking 01-05 with view counts, loading/no-data/error states).
+- Article detail pages now fire a fire-and-forget
+  `POST /api/news/{id}/view` on mount with a per-browser `nw_viewer_id` from
+  localStorage.
+- `News` interface in `mockData.ts` gained `view_count: number`.
 
 ### 2026-08-13 — Responsive 5-column grid (by Codex agent)
 
