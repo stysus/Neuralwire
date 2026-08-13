@@ -36,6 +36,43 @@ type News struct {
 	Status      NewsStatus `json:"status"`
 	PublishedAt *time.Time `json:"published_at"`
 	CreatedAt   time.Time  `json:"created_at"`
+
+	// ValueScore fields are computed by the backend scoring pipeline
+	// (AI + heuristic weighted). They are advisory: admins stay the final
+	// decision makers and scoring never auto-publishes.
+	ValueScore          int     `json:"value_score"`
+	ValueBreakdown      string  `json:"value_breakdown"`
+	ValueConfidence     float64 `json:"value_confidence"`
+	ValueRecommendation string  `json:"value_recommendation"`
+	ValueReason         string  `json:"value_reason"`
+	ValueLabel          string  `json:"value_label"`
+	ValueMethod         string  `json:"value_method"`
+}
+
+// ScoreThresholds are the configurable bounds for the HIGH/MEDIUM/LOW
+// advisory labels. Stored in app_settings so admins can tune them without a
+// redeploy.
+type ScoreThresholds struct {
+	LowMax    int `json:"low_max"`    // scores below this are LOW
+	MediumMin int `json:"medium_min"` // MEDIUM range start
+	MediumMax int `json:"medium_max"` // MEDIUM range end
+	HighMin   int `json:"high_min"`   // scores at/above this are HIGH
+}
+
+// Label maps a score to HIGH / MEDIUM / LOW using the configured thresholds.
+func (t ScoreThresholds) Label(score int) string {
+	if score >= t.HighMin {
+		return "HIGH"
+	}
+	if score >= t.MediumMin && score <= t.MediumMax {
+		return "MEDIUM"
+	}
+	return "LOW"
+}
+
+// DefaultScoreThresholds returns the out-of-the-box bounds.
+func DefaultScoreThresholds() ScoreThresholds {
+	return ScoreThresholds{LowMax: 59, MediumMin: 60, MediumMax: 79, HighMin: 80}
 }
 
 // Category is a browseable news category.

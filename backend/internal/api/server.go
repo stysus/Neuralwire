@@ -6,34 +6,43 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 
 	"neuralwire/backend/internal/auth"
 	"neuralwire/backend/internal/fetcher"
 	"neuralwire/backend/internal/repository"
 )
 
-// FeedFetcher runs one RSS fetch cycle. It is satisfied by *fetcher.Fetcher
-// and by test doubles.
+// FeedFetcher runs one RSS fetch cycle and reports its progress. It is
+// satisfied by *fetcher.Fetcher and by test doubles.
 type FeedFetcher interface {
 	FetchAll(ctx context.Context) (fetcher.FetchStats, error)
+	Progress() fetcher.FetchProgress
 }
 
 // Server wires repositories and middleware into an http.Handler.
 type Server struct {
 	newsRepo     *repository.NewsRepository
 	categoryRepo *repository.CategoryRepository
+	settingsRepo *repository.SettingsRepository
 	allowOrigins []string
 	auth         *auth.Manager
 	adminUser    string
 	adminPass    string
 	fetcher      FeedFetcher
 	logger       *log.Logger
+
+	// fetchMu guards the in-flight manual fetch cancel function so the admin
+	// cancel endpoint can abort a running cycle without data races.
+	fetchMu     sync.Mutex
+	fetchCancel context.CancelFunc
 }
 
 // ServerOptions configures the API server.
 type ServerOptions struct {
 	NewsRepo     *repository.NewsRepository
 	CategoryRepo *repository.CategoryRepository
+	SettingsRepo *repository.SettingsRepository
 	AllowOrigins []string
 	Auth         *auth.Manager
 	AdminUser    string
@@ -58,6 +67,7 @@ func NewServer(opts ServerOptions) *Server {
 	return &Server{
 		newsRepo:     opts.NewsRepo,
 		categoryRepo: opts.CategoryRepo,
+		settingsRepo: opts.SettingsRepo,
 		allowOrigins: opts.AllowOrigins,
 		auth:         opts.Auth,
 		adminUser:    opts.AdminUser,
@@ -84,10 +94,16 @@ func (s *Server) Handler() http.Handler {
 	admin.HandleFunc("GET /api/admin/news", s.handleAdminListNews)
 	admin.HandleFunc("GET /api/admin/news/{id}", s.handleAdminGetNews)
 	admin.HandleFunc("POST /api/admin/news", s.handleCreateNews)
+	admin.HandleFunc("PUT /api/admin/news/{id}", s.handleUpdateNews)
 	admin.HandleFunc("POST /api/admin/news/{id}/publish", s.handlePublishNews)
 	admin.HandleFunc("POST /api/admin/news/{id}/reject", s.handleRejectNews)
 	admin.HandleFunc("DELETE /api/admin/news/{id}", s.handleDeleteNews)
+	admin.HandleFunc("DELETE /api/admin/news", s.handleDeleteNewsByStatus)
 	mux.Handle("POST /api/admin/fetch", s.requireAuth(http.HandlerFunc(s.handleFetchNews)))
+	mux.Handle("POST /api/admin/fetch/cancel", s.requireAuth(http.HandlerFunc(s.handleCancelFetch)))
+	mux.Handle("GET /api/admin/fetch/progress", s.requireAuth(http.HandlerFunc(s.handleFetchProgress)))
+	mux.Handle("GET /api/admin/settings", s.requireAuth(http.HandlerFunc(s.handleGetSettings)))
+	mux.Handle("PUT /api/admin/settings", s.requireAuth(http.HandlerFunc(s.handleUpdateSettings)))
 	mux.Handle("/api/admin/", s.requireAuth(admin))
 
 	return s.recover(s.log(s.cors(mux)))

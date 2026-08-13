@@ -14,6 +14,7 @@
 	let isLoading = $state(true);
 	let errorMessage = $state('');
 	let confirmingDeleteId = $state<number | null>(null);
+	let isDeletingAll = $state(false);
 
 	async function fetchRejected(pageNumber: number) {
 		isLoading = true;
@@ -91,6 +92,43 @@
 		}
 	}
 
+	async function handleDeleteAll() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+
+		if (
+			!confirm(
+				'WARNING: Are you sure you want to delete ALL rejected articles? This action cannot be undone.'
+			)
+		) {
+			return;
+		}
+
+		isDeletingAll = true;
+		try {
+			const res = await fetch('http://localhost:8080/api/admin/news?status=rejected', {
+				method: 'DELETE',
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (res.ok) {
+				articles = [];
+				totalItems = 0;
+				totalPages = 0;
+				goto('/admin/rejected?page=1');
+			} else {
+				alert('Failed to delete all rejected articles.');
+			}
+		} catch (err) {
+			console.error('Delete all error:', err);
+			alert('Network error executing bulk delete.');
+		} finally {
+			isDeletingAll = false;
+		}
+	}
+
 	function changePage(newPage: number) {
 		if (newPage >= 1 && newPage <= totalPages) {
 			goto(`/admin/rejected?page=${newPage}`);
@@ -125,8 +163,17 @@
 			>
 			<h1 class="font-serif text-3xl font-medium text-white">BLOCKED INDEX</h1>
 		</div>
-		<div class="font-mono text-xs text-slate-500">
-			TOTAL_REJECTED: <span class="font-bold text-slate-300">{totalItems}</span> POST(S)
+		<div class="flex flex-wrap items-center gap-4">
+			<div class="font-mono text-xs text-slate-500">
+				TOTAL_REJECTED: <span class="font-bold text-slate-300">{totalItems}</span> POST(S)
+			</div>
+			<button
+				onclick={handleDeleteAll}
+				disabled={isDeletingAll || articles.length === 0}
+				class="cursor-pointer rounded border border-[#E11D48]/30 bg-[#E11D48]/5 px-3 py-1.5 font-mono text-xs text-[#E11D48] transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+			>
+				{isDeletingAll ? '[DELETING_ALL...]' : '[DELETE_ALL_REJECTED]'}
+			</button>
 		</div>
 	</div>
 

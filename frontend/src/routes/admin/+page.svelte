@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import FetchProgress from '$lib/FetchProgress.svelte';
 
 	let draftsCount = $state(0);
 	let publishedCount = $state(0);
@@ -13,6 +14,67 @@
 	let scrapeResult = $state<string | null>(null);
 	let scrapeError = $state<string | null>(null);
 	let lastFetchInfo = $state<{ time: string; result: string } | null>(null);
+
+	// Toast notification shown when a fetch cycle finishes.
+	let toast = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+	// Scoring thresholds (admin-configurable, backend persisted).
+	let thresholds = $state<{ low_max: number; medium_min: number; medium_max: number; high_min: number } | null>(
+		null
+	);
+	let settingsSaving = $state(false);
+	let settingsSaved = $state(false);
+
+	async function loadSettings() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+		try {
+			const res = await fetch('http://localhost:8080/api/admin/settings', {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (res.ok) thresholds = await res.json();
+		} catch (e) {
+			console.warn('load settings failed', e);
+		}
+	}
+
+	async function saveSettings() {
+		const token = localStorage.getItem('admin_token');
+		if (!token || !thresholds) return;
+		settingsSaving = true;
+		settingsSaved = false;
+		try {
+			const res = await fetch('http://localhost:8080/api/admin/settings', {
+				method: 'PUT',
+				headers: {
+					Authorization: `Bearer ${token}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify(thresholds)
+			});
+			if (res.ok) {
+				thresholds = await res.json();
+				settingsSaved = true;
+				setTimeout(() => (settingsSaved = false), 3000);
+			} else {
+				showToast('error', 'Failed to save scoring thresholds.');
+			}
+		} catch (e) {
+			console.error('save settings failed', e);
+			showToast('error', 'Failed to save scoring thresholds.');
+		} finally {
+			settingsSaving = false;
+		}
+	}
+
+	function showToast(type: 'success' | 'error', message: string) {
+		toast = { type, message };
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => {
+			toast = null;
+		}, 6000);
+	}
 
 	function loadLastFetch() {
 		const stored = localStorage.getItem('last_fetch_info');
@@ -45,6 +107,7 @@
 				const data = await res.json();
 				const resultMessage = `Scraped ${data.total_new ?? 0} new, skipped ${data.skipped_low_quality ?? 0} low quality`;
 				scrapeResult = resultMessage;
+				showToast('success', `Fetch cycle finished. ${resultMessage}`);
 
 				const nowStr = new Date().toLocaleString('en-US', {
 					month: 'short',
@@ -57,6 +120,10 @@
 				localStorage.setItem('last_fetch_info', JSON.stringify(lastFetchInfo));
 
 				await fetchStats();
+			} else if (res.status === 409) {
+				// Fetch was cancelled by the admin via CANCEL_FETCH.
+				scrapeResult = null;
+				showToast('error', 'Fetch cycle cancelled.');
 			} else {
 				if (res.status === 401 || res.status === 403) {
 					localStorage.removeItem('admin_token');
@@ -65,10 +132,12 @@
 				}
 				const data = await res.json().catch(() => ({}));
 				scrapeError = data.error || 'Scrape operation failed on the backend.';
+				showToast('error', `Fetch cycle failed. ${data.error || 'Unknown backend error.'}`);
 			}
 		} catch (err) {
 			console.error('Scrape request failed:', err);
 			scrapeError = 'Failed to communicate with the scraping node.';
+			showToast('error', 'Fetch cycle failed. Failed to communicate with the backend.');
 		} finally {
 			isScraping = false;
 		}
@@ -120,6 +189,7 @@
 	onMount(() => {
 		fetchStats();
 		loadLastFetch();
+		loadSettings();
 		serverTime = new Date().toISOString();
 
 		// Update time telemetry
@@ -134,6 +204,34 @@
 <svelte:head>
 	<title>System Dashboard | Neuralwire</title>
 </svelte:head>
+
+<!-- Toast notification for finished fetch cycles -->
+{#if toast}
+	<div
+		class="fixed top-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border p-4 font-mono text-xs shadow-2xl animate-slide-in"
+		style="border-color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; background: #0F172A;"
+	>
+		<div
+			class="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full"
+			style="background: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; box-shadow: 0 0 8px {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
+		></div>
+		<div class="flex-grow space-y-1">
+			<div
+				class="font-bold uppercase tracking-widest"
+				style="color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
+			>
+				{toast.type === 'success' ? '// FETCH_COMPLETE' : '// FETCH_FAILED'}
+			</div>
+			<div class="leading-relaxed text-slate-300">{toast.message}</div>
+		</div>
+		<button
+			onclick={() => (toast = null)}
+			class="cursor-pointer text-slate-500 transition-colors hover:text-white"
+		>
+			[X]
+		</button>
+	</div>
+{/if}
 
 <section
 	class="mx-auto flex max-w-7xl flex-grow flex-col justify-center px-4 py-12 sm:px-6 md:py-16 lg:px-8"
@@ -215,6 +313,9 @@
 			</button>
 		</div>
 	{:else}
+		<!-- Live fetch progress (percentage bar) while the cycle runs -->
+		<FetchProgress active={isScraping} />
+
 		{#if scrapeResult}
 			<div class="mb-6 rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 p-4 text-center font-mono text-xs relative">
 				<button 
@@ -355,5 +456,91 @@
 				</a>
 			</div>
 		</div>
+
+		<!-- Scoring Thresholds Settings -->
+		{#if thresholds}
+			<div
+				class="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/10 p-6 font-mono text-xs"
+			>
+				<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+					<span class="tracking-wider text-slate-500 uppercase">
+						// VALUE_SCORE_THRESHOLDS
+					</span>
+					{#if settingsSaved}
+						<span class="text-[#22D3EE]">SAVED ✓</span>
+					{/if}
+				</div>
+				<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+					<label class="block">
+						<span class="mb-1 block text-[10px] text-slate-500 uppercase">LOW MAX (&lt;)</span>
+						<input
+							type="number"
+							bind:value={thresholds.low_max}
+							min="0"
+							max="100"
+							class="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
+						/>
+					</label>
+					<label class="block">
+						<span class="mb-1 block text-[10px] text-slate-500 uppercase">MEDIUM MIN</span>
+						<input
+							type="number"
+							bind:value={thresholds.medium_min}
+							min="0"
+							max="100"
+							class="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
+						/>
+					</label>
+					<label class="block">
+						<span class="mb-1 block text-[10px] text-slate-500 uppercase">MEDIUM MAX</span>
+						<input
+							type="number"
+							bind:value={thresholds.medium_max}
+							min="0"
+							max="100"
+							class="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
+						/>
+					</label>
+					<label class="block">
+						<span class="mb-1 block text-[10px] text-slate-500 uppercase">HIGH MIN (≥)</span>
+						<input
+							type="number"
+							bind:value={thresholds.high_min}
+							min="0"
+							max="100"
+							class="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
+						/>
+					</label>
+				</div>
+				<div class="mt-4 flex items-center justify-between gap-3">
+					<span class="text-[10px] text-slate-600">
+						Advisory only — scoring never auto-publishes. Admin approval is always required.
+					</span>
+					<button
+						onclick={saveSettings}
+						disabled={settingsSaving}
+						class="cursor-pointer rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-4 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						{settingsSaving ? '[SAVING...]' : '[SAVE_THRESHOLDS]'}
+					</button>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </section>
+
+<style>
+	@keyframes slide-in {
+		from {
+			opacity: 0;
+			transform: translateX(20px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
+	}
+	.animate-slide-in {
+		animation: slide-in 0.3s ease-out;
+	}
+</style>

@@ -184,7 +184,13 @@ func (s *Server) handleAdminListNews(w http.ResponseWriter, r *http.Request) {
 		pageSize = maxPageSize
 	}
 
-	news, total, err := s.newsRepo.ListAdmin(string(status), page, pageSize)
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	valueLabel := strings.ToUpper(strings.TrimSpace(r.URL.Query().Get("value_label")))
+	if valueLabel != "" && valueLabel != "HIGH" && valueLabel != "MEDIUM" && valueLabel != "LOW" {
+		valueLabel = ""
+	}
+
+	news, total, err := s.newsRepo.ListAdmin(string(status), category, valueLabel, page, pageSize)
 	if err != nil {
 		s.logger.Printf("api: admin list news: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to list news")
@@ -242,17 +248,86 @@ func (s *Server) handleFetchNews(w http.ResponseWriter, r *http.Request) {
 
 	// Allow the full cycle to finish; individual scrapes are bounded by their
 	// own timeouts, and the request context is overridden so a client
-	// disconnect does not abort the fetch midway.
+	// disconnect does not abort the fetch midway. The cancel function is kept
+	// so POST /api/admin/fetch/cancel can abort the running cycle.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	s.fetchMu.Lock()
+	s.fetchCancel = cancel
+	s.fetchMu.Unlock()
+	defer func() {
+		s.fetchMu.Lock()
+		s.fetchCancel = nil
+		s.fetchMu.Unlock()
+	}()
+
 	stats, err := s.fetcher.FetchAll(ctx)
 	if err != nil {
+		if errors.Is(err, context.Canceled) {
+			s.logger.Printf("api: fetch cycle cancelled by admin")
+			s.writeError(w, http.StatusConflict, "fetch cycle cancelled")
+			return
+		}
 		s.logger.Printf("api: fetch cycle finished with errors: %v", err)
 		// Still report partial results; a per-source error is not a total
 		// failure of the manual trigger.
 	}
 	s.writeJSON(w, http.StatusOK, stats)
+}
+
+// handleCancelFetch aborts the currently running manual fetch cycle, if any.
+func (s *Server) handleCancelFetch(w http.ResponseWriter, r *http.Request) {
+	s.fetchMu.Lock()
+	cancel := s.fetchCancel
+	s.fetchMu.Unlock()
+
+	if cancel == nil {
+		s.writeJSON(w, http.StatusOK, map[string]any{"cancelled": false, "message": "no fetch cycle in progress"})
+		return
+	}
+	cancel()
+	s.logger.Printf("api: fetch cancel requested")
+	s.writeJSON(w, http.StatusOK, map[string]any{"cancelled": true, "message": "fetch cancellation requested"})
+}
+
+// handleFetchProgress reports a snapshot of the in-flight fetch cycle so the
+// admin UI can render a live percentage. It is protected by requireAuth.
+func (s *Server) handleFetchProgress(w http.ResponseWriter, r *http.Request) {
+	if s.fetcher == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "fetcher is not configured")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, s.fetcher.Progress())
+}
+
+// handleGetSettings returns the admin-configurable scoring thresholds.
+func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	if s.settingsRepo == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "settings repository is not configured")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetScoreThresholds())
+}
+
+// handleUpdateSettings persists the scoring thresholds. Values are clamped
+// by the repository; a missing key falls back to its default.
+func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	if s.settingsRepo == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "settings repository is not configured")
+		return
+	}
+	var req models.ScoreThresholds
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if err := s.settingsRepo.SetScoreThresholds(req); err != nil {
+		s.logger.Printf("api: update settings: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to update settings")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetScoreThresholds())
 }
 
 type createNewsRequest struct {
@@ -360,6 +435,62 @@ func (s *Server) handleStatusTransition(w http.ResponseWriter, r *http.Request, 
 	s.writeJSON(w, http.StatusOK, updated)
 }
 
+type updateNewsRequest struct {
+	Title    string `json:"title"`
+	Category string `json:"category"`
+	Summary  string `json:"summary"`
+	Content  string `json:"content"`
+	ImageURL string `json:"image_url"`
+}
+
+func (s *Server) handleUpdateNews(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid news id")
+		return
+	}
+
+	var req updateNewsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" {
+		s.writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if req.Category == "" {
+		req.Category = "ai"
+	}
+	if _, err := s.categoryRepo.EnsureCreated(req.Category); err != nil {
+		s.logger.Printf("api: ensure category %q: %v", req.Category, err)
+	}
+
+	article := models.News{
+		Title:    req.Title,
+		Category: req.Category,
+		Summary:  req.Summary,
+		Content:  req.Content,
+		ImageURL: req.ImageURL,
+	}
+
+	if err := s.newsRepo.Update(id, article); err != nil {
+		s.logger.Printf("api: update news %d: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to update news")
+		return
+	}
+
+	updated, err := s.newsRepo.GetByID(id)
+	if err != nil || updated == nil {
+		s.logger.Printf("api: load updated news %d: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to load updated news")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, updated)
+}
+
 func (s *Server) handleDeleteNews(w http.ResponseWriter, r *http.Request) {
 	id, err := pathID(r)
 	if err != nil {
@@ -380,6 +511,21 @@ func (s *Server) handleDeleteNews(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.newsRepo.Delete(id); err != nil {
 		s.logger.Printf("api: delete news %d: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to delete news")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleDeleteNewsByStatus(w http.ResponseWriter, r *http.Request) {
+	status := models.NewsStatus(strings.TrimSpace(r.URL.Query().Get("status")))
+	if status == "" || !status.Valid() {
+		s.writeError(w, http.StatusBadRequest, "invalid or missing status parameter")
+		return
+	}
+
+	if err := s.newsRepo.DeleteByStatus(string(status)); err != nil {
+		s.logger.Printf("api: delete news by status %s: %v", status, err)
 		s.writeError(w, http.StatusInternalServerError, "failed to delete news")
 		return
 	}

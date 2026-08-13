@@ -122,7 +122,7 @@
 							<span>•</span>
 							<span>{formatDate(post.published_at)}</span>
 							<span>•</span>
-							<span>{getReadingTime(post.content)}</span>
+							<span>{getReadingTime(post.summary)}</span>
 						</div>
 
 						<!-- Title -->

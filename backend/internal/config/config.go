@@ -34,11 +34,20 @@ type Config struct {
 	// ScrapeMaxPerSource caps how many newest articles per source get
 	// full-content scraping in one fetch cycle.
 	ScrapeMaxPerSource int
+	// ScrapeMaxInsertPerSource caps how many new articles per source are
+	// stored as drafts in one fetch cycle (scraped or fallback alike).
+	ScrapeMaxInsertPerSource int
 	// ScrapeTimeout bounds each full-content scrape attempt.
 	ScrapeTimeout time.Duration
 	// ScrapeMinContentChars is the minimum content length for a fetched
 	// article to be kept as a draft; shorter content is skipped.
 	ScrapeMinContentChars int
+	// ScrapeDelayMin is the lower bound of the politeness delay applied
+	// before every external request during a fetch cycle.
+	ScrapeDelayMin time.Duration
+	// ScrapeDelayMax is the upper bound of the politeness delay applied
+	// before every external request during a fetch cycle.
+	ScrapeDelayMax time.Duration
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -54,7 +63,11 @@ func Load() (Config, error) {
 		getenv("AI_SUMMARY_MODEL", ""),
 	)
 
-	scrapeMax, err := getenvInt("SCRAPE_MAX_PER_SOURCE", 20)
+	scrapeMax, err := getenvInt("SCRAPE_MAX_PER_SOURCE", 5)
+	if err != nil {
+		return Config{}, err
+	}
+	scrapeMaxInsert, err := getenvInt("SCRAPE_MAX_INSERT_PER_SOURCE", 5)
 	if err != nil {
 		return Config{}, err
 	}
@@ -66,21 +79,32 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	scrapeDelayMinSec, err := getenvInt("SCRAPE_DELAY_MIN_SECONDS", 1)
+	if err != nil {
+		return Config{}, err
+	}
+	scrapeDelayMaxSec, err := getenvInt("SCRAPE_DELAY_MAX_SECONDS", 2)
+	if err != nil {
+		return Config{}, err
+	}
 
 	return Config{
-		Port:                  getenv("PORT", "8080"),
-		DatabasePath:          getenv("DB_PATH", "data/neuralwire.db"),
-		CORSAllowOrigins:      getenvList("CORS_ALLOW_ORIGIN", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),
-		AISummaryAPIKey:       os.Getenv("AI_SUMMARY_API_KEY"),
-		AISummaryModel:        model,
-		AISummaryBaseURL:      baseURL,
-		AISummaryProvider:     getenv("AI_SUMMARY_PROVIDER", ""),
-		AdminUsername:         getenv("ADMIN_USERNAME", "admin"),
-		AdminPassword:         getenv("ADMIN_PASSWORD", "admin123"),
-		AdminTokenSecret:      getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
-		ScrapeMaxPerSource:    scrapeMax,
-		ScrapeTimeout:         time.Duration(scrapeTimeoutSec) * time.Second,
-		ScrapeMinContentChars: scrapeMinContent,
+		Port:                     getenv("PORT", "8080"),
+		DatabasePath:             getenv("DB_PATH", "data/neuralwire.db"),
+		CORSAllowOrigins:         getenvList("CORS_ALLOW_ORIGIN", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),
+		AISummaryAPIKey:          os.Getenv("AI_SUMMARY_API_KEY"),
+		AISummaryModel:           model,
+		AISummaryBaseURL:         baseURL,
+		AISummaryProvider:        getenv("AI_SUMMARY_PROVIDER", ""),
+		AdminUsername:            getenv("ADMIN_USERNAME", "admin"),
+		AdminPassword:            getenv("ADMIN_PASSWORD", "admin123"),
+		AdminTokenSecret:         getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
+		ScrapeMaxPerSource:       scrapeMax,
+		ScrapeMaxInsertPerSource: scrapeMaxInsert,
+		ScrapeTimeout:            time.Duration(scrapeTimeoutSec) * time.Second,
+		ScrapeMinContentChars:    scrapeMinContent,
+		ScrapeDelayMin:           time.Duration(scrapeDelayMinSec) * time.Second,
+		ScrapeDelayMax:           time.Duration(scrapeDelayMaxSec) * time.Second,
 	}, nil
 }
 
@@ -214,4 +238,77 @@ func loadDotEnv(path string) {
 		}
 		os.Setenv(key, value)
 	}
+}
+
+// ReadDotEnvDirect reads a key-value file directly from disk and returns the mapped keys.
+func ReadDotEnvDirect(path string) map[string]string {
+	m := make(map[string]string)
+	f, err := os.Open(path)
+	if err != nil {
+		return m
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if i := strings.Index(value, " #"); i >= 0 {
+			value = strings.TrimSpace(value[:i])
+		}
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') ||
+				(value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+		if key != "" {
+			m[key] = value
+		}
+	}
+	return m
+}
+
+// LoadAIConfig reads the latest AI configuration directly from the .env file.
+func LoadAIConfig() (apiKey, baseURL, model string) {
+	env := ReadDotEnvDirect(".env")
+
+	// Get values from .env directly, fallback to os.Getenv
+	apiKey = env["AI_SUMMARY_API_KEY"]
+	if apiKey == "" {
+		apiKey = os.Getenv("AI_SUMMARY_API_KEY")
+	}
+
+	provider := env["AI_SUMMARY_PROVIDER"]
+	if provider == "" {
+		provider = os.Getenv("AI_SUMMARY_PROVIDER")
+	}
+
+	rawBaseURL := env["AI_SUMMARY_BASE_URL"]
+	if rawBaseURL == "" {
+		rawBaseURL = os.Getenv("AI_SUMMARY_BASE_URL")
+	}
+
+	rawModel := env["AI_SUMMARY_MODEL"]
+	if rawModel == "" {
+		rawModel = os.Getenv("AI_SUMMARY_MODEL")
+	}
+
+	baseURL, model = summaryDefaults(provider, rawBaseURL, rawModel)
+
+	// Clean up baseURL to prevent misconfiguration if user appends endpoint paths
+	baseURL = strings.TrimSuffix(baseURL, "/chat/completions")
+	baseURL = strings.TrimSuffix(baseURL, "/chat/completions/")
+	baseURL = strings.TrimSuffix(baseURL, "/images/generations")
+	baseURL = strings.TrimSuffix(baseURL, "/images/generations/")
+
+	return apiKey, baseURL, model
 }

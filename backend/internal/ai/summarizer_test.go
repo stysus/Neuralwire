@@ -17,7 +17,8 @@ func noopLogger() *log.Logger {
 
 func TestSummarizeWithoutAPIKeyFallsBack(t *testing.T) {
 	s := NewSummarizer(SummarizerOptions{
-		Logger: noopLogger(),
+		FallbackChars: 300,
+		Logger:        noopLogger(),
 	})
 	content := "<p>First sentence. " + strings.Repeat("word ", 100) + "</p>"
 
@@ -83,5 +84,59 @@ func TestSummarizeFallsBackOnUpstreamError(t *testing.T) {
 	got := s.Summarize(context.Background(), "Title", "<p>"+strings.Repeat("word ", 100)+"</p>")
 	if got == "" {
 		t.Fatal("expected fallback summary on upstream error")
+	}
+}
+
+func TestParseValueScore(t *testing.T) {
+	got, ok := parseValueScore(`{"score": 85, "impact": 90, "novelty": 80, "quality": 75, "confidence": 0.85, "recommendation": "publish", "reason": "Major model release."}`)
+	if !ok {
+		t.Fatal("expected parse success")
+	}
+	if got.Score != 85 || got.Impact != 90 || got.Novelty != 80 || got.Quality != 75 {
+		t.Errorf("subscores = %+v, want 85/90/80/75", got)
+	}
+	if got.Confidence != 0.85 || got.Recommendation != "publish" {
+		t.Errorf("confidence/recommendation = %v/%q", got.Confidence, got.Recommendation)
+	}
+	if got.Breakdown == "" {
+		t.Error("breakdown should be a JSON string")
+	}
+}
+
+func TestParseValueScoreToleratesFences(t *testing.T) {
+	got, ok := parseValueScore("```json\n{\"score\": 42, \"impact\": 40, \"novelty\": 40, \"quality\": 45, \"confidence\": 0.5, \"recommendation\": \"review\", \"reason\": \"ok\"}\n```")
+	if !ok {
+		t.Fatal("expected parse success with code fences")
+	}
+	if got.Score != 42 {
+		t.Errorf("Score = %d, want 42", got.Score)
+	}
+}
+
+func TestParseValueScoreClampsAndDefaults(t *testing.T) {
+	got, ok := parseValueScore(`{"score": 250, "impact": -5, "novelty": 100, "quality": 50, "confidence": 5, "recommendation": "whatever", "reason": "x"}`)
+	if !ok {
+		t.Fatal("expected parse success")
+	}
+	if got.Score != 100 {
+		t.Errorf("Score = %d, want clamped 100", got.Score)
+	}
+	if got.Impact != 0 {
+		t.Errorf("Impact = %d, want clamped 0", got.Impact)
+	}
+	if got.Confidence != 1 {
+		t.Errorf("Confidence = %v, want clamped 1", got.Confidence)
+	}
+	if got.Recommendation != "review" {
+		t.Errorf("Recommendation = %q, want default review", got.Recommendation)
+	}
+}
+
+func TestParseValueScoreInvalid(t *testing.T) {
+	if _, ok := parseValueScore("no json here"); ok {
+		t.Error("expected failure for non-JSON input")
+	}
+	if _, ok := parseValueScore(""); ok {
+		t.Error("expected failure for empty input")
 	}
 }

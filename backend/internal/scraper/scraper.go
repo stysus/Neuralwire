@@ -33,6 +33,8 @@ type Article struct {
 	Content string
 	// URL is the final URL after redirects were followed.
 	URL string
+	// ImageURL is the cover/featured image URL extracted from the page (e.g. Open Graph).
+	ImageURL string
 }
 
 // Options configures the Scraper.
@@ -127,6 +129,9 @@ func (s *Scraper) Scrape(ctx context.Context, rawURL string) (*Article, error) {
 		return nil, fmt.Errorf("parse final url: %w", err)
 	}
 
+	// Extract Open Graph or meta cover image from the raw page body before cleaning
+	metaImage := extractMetaImage(body, pageURL)
+
 	cleaned, err := stripBoilerplate(body)
 	if err != nil {
 		return nil, fmt.Errorf("clean boilerplate: %w", err)
@@ -152,9 +157,10 @@ func (s *Scraper) Scrape(ctx context.Context, rawURL string) (*Article, error) {
 	}
 
 	return &Article{
-		Title:   strings.TrimSpace(article.Title()),
-		Content: content,
-		URL:     finalURL,
+		Title:    strings.TrimSpace(article.Title()),
+		Content:  content,
+		URL:      finalURL,
+		ImageURL: metaImage,
 	}, nil
 }
 
@@ -290,6 +296,73 @@ func FirstImage(content string) string {
 	return ""
 }
 
+// UpgradeImageURL rewrites a cover image URL to request a higher-resolution,
+// optimized variant from well-known image CDNs. Many publishers ship cover
+// images as small thumbnails (e.g. Contentful's ?w=300&q=30) that look blurry
+// when rendered as a 16:9 hero; this raises the width/quality parameters
+// while leaving the underlying asset untouched. Unknown hosts are returned
+// unchanged.
+func UpgradeImageURL(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+
+	host := strings.ToLower(u.Hostname())
+	q := u.Query()
+	switch {
+	case strings.Contains(host, "ctfassets.net"): // Contentful
+		q.Set("w", "1600")
+		q.Set("q", "80")
+		q.Set("fm", "webp")
+	case strings.Contains(host, "imgix.net"): // imgix
+		q.Set("w", "1600")
+		q.Set("q", "80")
+		q.Set("auto", "compress,format")
+	case strings.Contains(host, "cloudinary.com"): // Cloudinary
+		q.Set("w", "1600")
+		q.Set("q", "auto")
+		q.Set("f", "auto")
+	case strings.Contains(host, "unsplash.com"): // Unsplash
+		// Skip the /featured/800x450/ fallback URLs produced by the image
+		// generator: they already carry a fixed resolution and a keyword
+		// query string that must not be mangled.
+		if strings.Contains(u.Path, "/featured/") {
+			return raw
+		}
+		q.Set("w", "1600")
+		q.Set("q", "80")
+		q.Set("auto", "format")
+	case strings.Contains(host, "googleusercontent.com"): // Google CDN
+		// googleusercontent URLs embed the size in the path tail (=w300-h200
+		// or =s300). Normalize to a wide "=s1600" form.
+		path := u.Path
+		if idx := strings.LastIndex(path, "="); idx >= 0 {
+			u.Path = path[:idx] + "=s1600"
+		}
+		u.RawQuery = ""
+		return u.String()
+	case strings.Contains(host, "wp.com") || strings.Contains(host, "wordpress.com") ||
+		strings.Contains(host, "github.blog"): // WP.com / Jetpack-style resizing params
+		if q.Get("w") != "" {
+			q.Set("w", "1600")
+		}
+		if q.Get("resize") != "" {
+			q.Set("resize", "1600,900")
+		}
+	default:
+		// Unknown CDN: leave untouched rather than guessing.
+		return raw
+	}
+
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // resolveURL resolves ref against base. It returns data/blob/mailto/
 // javascript/tel URIs untouched, and handles protocol-relative URLs.
 func resolveURL(base *url.URL, ref string) (string, error) {
@@ -333,4 +406,37 @@ func resolveSrcset(base *url.URL, srcset string) string {
 func isHTMLContentType(ct string) bool {
 	ct = strings.ToLower(ct)
 	return strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml+xml")
+}
+
+// extractMetaImage extracts a representative image URL from the page headers (e.g. og:image, twitter:image).
+func extractMetaImage(body []byte, base *url.URL) string {
+	doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
+	if err != nil {
+		return ""
+	}
+
+	var rawImg string
+	// 1. Try og:image
+	if val, ok := doc.Find(`meta[property="og:image"]`).Attr("content"); ok && val != "" {
+		rawImg = val
+	}
+	// 2. Try twitter:image
+	if rawImg == "" {
+		if val, ok := doc.Find(`meta[name="twitter:image"]`).Attr("content"); ok && val != "" {
+			rawImg = val
+		}
+	}
+	// 3. Try link image_src
+	if rawImg == "" {
+		if val, ok := doc.Find(`link[rel="image_src"]`).Attr("href"); ok && val != "" {
+			rawImg = val
+		}
+	}
+
+	if rawImg != "" {
+		if abs, err := resolveURL(base, rawImg); err == nil {
+			return abs
+		}
+	}
+	return ""
 }

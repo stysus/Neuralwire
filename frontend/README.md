@@ -1,22 +1,25 @@
-# sv
+# Neuralwire Frontend
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+SvelteKit frontend for the **Neuralwire** AI news website (global audience,
+English by default). Renders the public news feed, category/search pages,
+article detail pages and the admin moderation panel.
 
-## Creating a project
+## Features
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-npx sv@0.17.0 create --template minimal --types ts --add tailwindcss="plugins:none" sveltekit-adapter="adapter:auto" prettier eslint --install npm ./
-```
+- Public feed with category filters, search and per-article detail pages
+- **Curator model article pages**: each story shows an AI digest summary plus
+  a "READ FULL STORY" link to the original source (full text is never
+  republished)
+- **Admin panel** (`/admin`):
+  - Dashboard with draft/published/rejected counts, manual fetch trigger and
+    live fetch progress bar that survives page refreshes, plus
+    `[CANCEL_FETCH]` to abort a running cycle
+  - Scoring thresholds editor (`// VALUE_SCORE_THRESHOLDS`)
+  - Draft review with publish/reject/delete workflows
+  - Draft list shows the advisory value score badge
+    (`HIGH`/`MEDIUM`/`LOW`), sub-score breakdown (AI impact/novelty/quality +
+    heuristic), confidence, method and AI reason, with filtering by category
+    and by value label
 
 ## Developing
 

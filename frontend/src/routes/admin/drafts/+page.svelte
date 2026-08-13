@@ -3,9 +3,12 @@
 	import { page as pageStore } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import Image from '$lib/Image.svelte';
+	import FetchProgress from '$lib/FetchProgress.svelte';
 
 	// Retrieve active page from URL query params
 	let currentPage = $derived(Number($pageStore.url.searchParams.get('page')) || 1);
+	let selectedCategory = $derived($pageStore.url.searchParams.get('category') || '');
+	let selectedValueLabel = $derived($pageStore.url.searchParams.get('value_label') || '');
 	const pageSize = 10;
 
 	let articles = $state<any[]>([]);
@@ -17,9 +20,22 @@
 	let confirmingDeleteId = $state<number | null>(null);
 
 	let isScraping = $state(false);
+	let isDeletingAll = $state(false);
 	let scrapeResult = $state<string | null>(null);
 	let scrapeError = $state<string | null>(null);
 	let lastFetchInfo = $state<{ time: string; result: string } | null>(null);
+
+	// Toast notification shown when a fetch cycle finishes.
+	let toast = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function showToast(type: 'success' | 'error', message: string) {
+		toast = { type, message };
+		if (toastTimer) clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => {
+			toast = null;
+		}, 6000);
+	}
 
 	function loadLastFetch() {
 		const stored = localStorage.getItem('last_fetch_info');
@@ -52,6 +68,7 @@
 				const data = await res.json();
 				const resultMessage = `Scraped ${data.total_new ?? 0} new, skipped ${data.skipped_low_quality ?? 0} low quality`;
 				scrapeResult = resultMessage;
+				showToast('success', `Fetch cycle finished. ${resultMessage}`);
 
 				const nowStr = new Date().toLocaleString('en-US', {
 					month: 'short',
@@ -64,6 +81,10 @@
 				localStorage.setItem('last_fetch_info', JSON.stringify(lastFetchInfo));
 
 				await fetchDrafts(currentPage);
+			} else if (res.status === 409) {
+				// Fetch was cancelled by the admin via CANCEL_FETCH.
+				scrapeResult = null;
+				showToast('error', 'Fetch cycle cancelled.');
 			} else {
 				if (res.status === 401 || res.status === 403) {
 					localStorage.removeItem('admin_token');
@@ -72,10 +93,12 @@
 				}
 				const data = await res.json().catch(() => ({}));
 				scrapeError = data.error || 'Scrape operation failed on the backend.';
+				showToast('error', `Fetch cycle failed. ${data.error || 'Unknown backend error.'}`);
 			}
 		} catch (err) {
 			console.error('Scrape request failed:', err);
 			scrapeError = 'Failed to communicate with the scraping node.';
+			showToast('error', 'Fetch cycle failed. Failed to communicate with the backend.');
 		} finally {
 			isScraping = false;
 		}
@@ -88,15 +111,19 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(
-				`http://localhost:8080/api/admin/news?status=draft&page=${pageNumber}&page_size=${pageSize}`,
-				{
-					headers: {
-						Authorization: `Bearer ${token}`,
-						Accept: 'application/json'
-					}
+			let url = `http://localhost:8080/api/admin/news?status=draft&page=${pageNumber}&page_size=${pageSize}`;
+			if (selectedCategory) {
+				url += `&category=${encodeURIComponent(selectedCategory)}`;
+			}
+			if (selectedValueLabel) {
+				url += `&value_label=${encodeURIComponent(selectedValueLabel)}`;
+			}
+			const res = await fetch(url, {
+				headers: {
+					Authorization: `Bearer ${token}`,
+					Accept: 'application/json'
 				}
-			);
+			});
 
 			if (res.ok) {
 				const result = await res.json();
@@ -219,10 +246,114 @@
 		}
 	}
 
+	async function handleDeleteAll() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+
+		if (
+			!confirm(
+				'WARNING: Are you sure you want to delete ALL draft articles? This action cannot be undone.'
+			)
+		) {
+			return;
+		}
+
+		isDeletingAll = true;
+		try {
+			const res = await fetch('http://localhost:8080/api/admin/news?status=draft', {
+				method: 'DELETE',
+				headers: {
+					Authorization: `Bearer ${token}`
+				}
+			});
+
+			if (res.ok) {
+				articles = [];
+				totalItems = 0;
+				totalPages = 0;
+				goto('/admin/drafts?page=1');
+			} else {
+				alert('Failed to delete all drafts.');
+			}
+		} catch (err) {
+			console.error('Delete all error:', err);
+			alert('Network error executing bulk delete.');
+		} finally {
+			isDeletingAll = false;
+		}
+	}
+
 	function changePage(newPage: number) {
 		if (newPage >= 1 && newPage <= totalPages) {
-			goto(`/admin/drafts?page=${newPage}`);
+			let path = `/admin/drafts?page=${newPage}`;
+			if (selectedCategory) {
+				path += `&category=${encodeURIComponent(selectedCategory)}`;
+			}
+			if (selectedValueLabel) {
+				path += `&value_label=${encodeURIComponent(selectedValueLabel)}`;
+			}
+			goto(path);
 		}
+	}
+
+	function handleCategoryChange(e: Event) {
+		const val = (e.target as HTMLSelectElement).value;
+		let path = `/admin/drafts?page=1`;
+		if (val) {
+			path += `&category=${encodeURIComponent(val)}`;
+		}
+		if (selectedValueLabel) {
+			path += `&value_label=${encodeURIComponent(selectedValueLabel)}`;
+		}
+		goto(path);
+	}
+
+	function handleValueLabelChange(e: Event) {
+		const val = (e.target as HTMLSelectElement).value;
+		let path = `/admin/drafts?page=1`;
+		if (selectedCategory) {
+			path += `&category=${encodeURIComponent(selectedCategory)}`;
+		}
+		if (val) {
+			path += `&value_label=${encodeURIComponent(val)}`;
+		}
+		goto(path);
+	}
+
+	// Score display helpers -------------------------------------------------
+	function scoreColor(label: string) {
+		if (label === 'HIGH') return '#22D3EE';
+		if (label === 'MEDIUM') return '#F59E0B';
+		if (label === 'LOW') return '#64748B';
+		return '#64748B';
+	}
+
+	function scoreClass(label: string) {
+		if (label === 'HIGH')
+			return 'border-[#22D3EE]/40 bg-[#22D3EE]/10 text-[#22D3EE]';
+		if (label === 'MEDIUM')
+			return 'border-amber-400/40 bg-amber-400/10 text-amber-400';
+		return 'border-slate-500/40 bg-slate-500/10 text-slate-400';
+	}
+
+	function parseBreakdown(item: any): any {
+		try {
+			return item.value_breakdown ? JSON.parse(item.value_breakdown) : null;
+		} catch {
+			return null;
+		}
+	}
+
+	function formatScore(item: any) {
+		const s = item.value_score;
+		if (s === null || s === undefined) return '—';
+		return s;
+	}
+
+	function formatReason(item: any) {
+		const r = item.value_reason;
+		if (!r) return 'No scoring reason available.';
+		return r;
 	}
 
 	function formatDate(dateStr: string) {
@@ -239,6 +370,34 @@
 <svelte:head>
 	<title>Draft Buffer Inventory | Neuralwire</title>
 </svelte:head>
+
+<!-- Toast notification for finished fetch cycles -->
+{#if toast}
+	<div
+		class="fixed top-4 right-4 z-50 flex max-w-sm items-start gap-3 rounded-xl border p-4 font-mono text-xs shadow-2xl animate-slide-in"
+		style="border-color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; background: #0F172A;"
+	>
+		<div
+			class="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full"
+			style="background: {toast.type === 'success' ? '#22D3EE' : '#E11D48'}; box-shadow: 0 0 8px {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
+		></div>
+		<div class="flex-grow space-y-1">
+			<div
+				class="font-bold uppercase tracking-widest"
+				style="color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
+			>
+				{toast.type === 'success' ? '// FETCH_COMPLETE' : '// FETCH_FAILED'}
+			</div>
+			<div class="leading-relaxed text-slate-300">{toast.message}</div>
+		</div>
+		<button
+			onclick={() => (toast = null)}
+			class="cursor-pointer text-slate-500 transition-colors hover:text-white"
+		>
+			[X]
+		</button>
+	</div>
+{/if}
 
 <section
 	class="mx-auto flex w-full max-w-7xl flex-grow flex-col justify-start px-4 py-12 sm:px-6 md:py-16 lg:px-8"
@@ -260,7 +419,33 @@
 					<div>LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span> <span class="text-slate-400">({lastFetchInfo.result})</span></div>
 				{/if}
 			</div>
-			<div>
+			<div class="flex flex-wrap items-center gap-3">
+				<!-- Category Filter Selector -->
+				<select
+					value={selectedCategory}
+					onchange={handleCategoryChange}
+					class="cursor-pointer rounded border border-[rgba(255,255,255,0.12)] bg-[#070B13] px-3 py-1.5 font-mono text-xs text-slate-300 focus:border-[#22D3EE] focus:outline-none"
+				>
+					<option value="">ALL_CATEGORIES</option>
+					<option value="ai">AI</option>
+					<option value="tools">TOOLS</option>
+					<option value="research">RESEARCH</option>
+					<option value="industry">INDUSTRY</option>
+					<option value="machine-learning">MACHINE_LEARNING</option>
+				</select>
+
+				<!-- Value score label filter -->
+				<select
+					value={selectedValueLabel}
+					onchange={handleValueLabelChange}
+					class="cursor-pointer rounded border border-[rgba(255,255,255,0.12)] bg-[#070B13] px-3 py-1.5 font-mono text-xs text-slate-300 focus:border-[#22D3EE] focus:outline-none"
+				>
+					<option value="">ALL_VALUES</option>
+					<option value="HIGH">HIGH ≥80</option>
+					<option value="MEDIUM">MEDIUM 60–79</option>
+					<option value="LOW">LOW &lt;60</option>
+				</select>
+
 				<button
 					onclick={handleScrape}
 					disabled={isScraping}
@@ -272,9 +457,20 @@
 						[RUN_FETCH()]
 					{/if}
 				</button>
+
+				<button
+					onclick={handleDeleteAll}
+					disabled={isDeletingAll || articles.length === 0}
+					class="cursor-pointer rounded border border-[#E11D48]/30 bg-[#E11D48]/5 px-3 py-1.5 font-mono text-xs text-[#E11D48] transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{isDeletingAll ? '[DELETING_ALL...]' : '[DELETE_ALL_DRAFTS]'}
+				</button>
 			</div>
 		</div>
 	</div>
+
+	<!-- Live fetch progress (percentage bar) while the cycle runs -->
+	<FetchProgress active={isScraping} />
 
 	<!-- Scrape results feedback -->
 	{#if scrapeResult}
@@ -353,7 +549,7 @@
 						</div>
 
 						<div class="flex-grow space-y-3">
-							<div class="flex items-center space-x-3 font-mono text-[10px] text-slate-500">
+							<div class="flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[10px] text-slate-500">
 								<span
 									class="rounded border border-[#22D3EE]/20 bg-[#22D3EE]/5 px-1.5 py-0.5 font-bold text-[#22D3EE] uppercase"
 									>{item.category}</span
@@ -363,6 +559,38 @@
 								<span>•</span>
 								<span>{formatDate(item.created_at)}</span>
 							</div>
+
+							<!-- Value score badge + sub-scores -->
+							{#if item.value_score !== null && item.value_score !== undefined}
+								{@const bd = parseBreakdown(item)}
+								<div class="flex flex-wrap items-center gap-2 font-mono text-[10px]">
+									<span
+										class="rounded border px-2 py-0.5 font-bold uppercase {scoreClass(item.value_label)}"
+									>
+										{item.value_label || 'UNSCORED'} • {formatScore(item)}
+									</span>
+									{#if bd?.ai && typeof bd.ai === 'object'}
+										<span class="text-slate-500">
+											AI:{bd.ai.score} (I:{bd.ai.impact} N:{bd.ai.novelty} Q:{bd.ai.quality})
+										</span>
+									{/if}
+									{#if bd?.heuristic}
+										<span class="text-slate-600">H:{bd.heuristic.score}</span>
+									{/if}
+									{#if item.value_confidence}
+										<span class="text-slate-600">C:{item.value_confidence}</span>
+									{/if}
+									{#if item.value_method}
+										<span class="text-slate-600">[{item.value_method}]</span>
+									{/if}
+								</div>
+								{#if item.value_reason}
+									<p class="max-w-4xl font-sans text-[11px] leading-relaxed font-light text-slate-500 italic">
+										{formatReason(item)}
+									</p>
+								{/if}
+							{/if}
+
 							<h3
 								class="font-serif text-lg leading-snug font-normal text-white transition-colors group-hover:text-[#22D3EE]"
 							>
@@ -461,3 +689,19 @@
 		{/if}
 	{/if}
 </section>
+
+<style>
+	@keyframes slide-in {
+		from {
+			opacity: 0;
+			transform: translateX(20px);
+		}
+		to {
+			opacity: 1;
+			transform: translateX(0);
+		}
+	}
+	.animate-slide-in {
+		animation: slide-in 0.3s ease-out;
+	}
+</style>

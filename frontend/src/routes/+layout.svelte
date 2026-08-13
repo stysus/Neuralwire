@@ -269,8 +269,8 @@
 						>
 					</li>
 					<li>
-						<a href="/admin" class="text-slate-500 transition-colors hover:text-[#22D3EE]/80"
-							>ADMIN PANEL</a
+						<a href="/copyright" class="text-slate-400 transition-colors hover:text-white"
+							>COPYRIGHT & DMCA</a
 						>
 					</li>
 				</ul>

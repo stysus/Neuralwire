@@ -77,7 +77,7 @@ export async function getNews(
 			(item) =>
 				item.title.toLowerCase().includes(query) ||
 				item.summary.toLowerCase().includes(query) ||
-				item.content.toLowerCase().includes(query)
+				(item.content || '').toLowerCase().includes(query)
 		);
 	}
 

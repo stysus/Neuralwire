@@ -41,6 +41,7 @@ func newTestServer(t *testing.T) *Server {
 	return NewServer(ServerOptions{
 		NewsRepo:     repository.NewNewsRepository(db),
 		CategoryRepo: repository.NewCategoryRepository(db),
+		SettingsRepo: repository.NewSettingsRepository(db),
 		AllowOrigins: []string{"http://localhost:5173", "http://127.0.0.1:5173"},
 		Auth:         auth.NewManager("test-secret", 0),
 		AdminUser:    testAdminUser,
@@ -455,14 +456,19 @@ func itoa(n int64) string {
 
 // fakeFeedFetcher is a test double for the manual fetch endpoint.
 type fakeFeedFetcher struct {
-	stats fetcher.FetchStats
-	err   error
-	calls int
+	stats    fetcher.FetchStats
+	err      error
+	calls    int
+	progress fetcher.FetchProgress
 }
 
 func (f *fakeFeedFetcher) FetchAll(_ context.Context) (fetcher.FetchStats, error) {
 	f.calls++
 	return f.stats, f.err
+}
+
+func (f *fakeFeedFetcher) Progress() fetcher.FetchProgress {
+	return f.progress
 }
 
 func TestFetchEndpoint(t *testing.T) {
@@ -518,6 +524,39 @@ func TestFetchEndpointWithoutFetcher(t *testing.T) {
 	}
 }
 
+func TestFetchProgressEndpoint(t *testing.T) {
+	fake := &fakeFeedFetcher{progress: fetcher.FetchProgress{
+		Running:       true,
+		TotalSources:  14,
+		DoneSources:   7,
+		CurrentSource: "OpenAI Blog",
+		Percent:       50,
+	}}
+	s := newTestServer(t)
+	s.fetcher = fake
+	token := adminToken(t, s)
+
+	rec := doJSONAs(t, s, http.MethodGet, "/api/admin/fetch/progress", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("progress status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var resp fetcher.FetchProgress
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode progress response: %v", err)
+	}
+	if !resp.Running || resp.Percent != 50 || resp.TotalSources != 14 || resp.DoneSources != 7 {
+		t.Errorf("progress = %+v, want running=true percent=50 total=14 done=7", resp)
+	}
+}
+
+func TestFetchProgressEndpointRequiresAuth(t *testing.T) {
+	s := newTestServer(t)
+	s.fetcher = &fakeFeedFetcher{}
+	if rec := doJSON(t, s, http.MethodGet, "/api/admin/fetch/progress", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("progress without token = %d, want 401", rec.Code)
+	}
+}
+
 func TestAdminListStableOrdering(t *testing.T) {
 	s := newTestServer(t)
 	token := adminToken(t, s)
@@ -552,5 +591,83 @@ func TestAdminListStableOrdering(t *testing.T) {
 	}
 	if resp.Data[0].ID != ids[2] {
 		t.Errorf("newest first id = %d, want %d", resp.Data[0].ID, ids[2])
+	}
+}
+
+func TestCancelFetchEndpoint(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	// Cancel with no cycle in progress -> 200, cancelled=false.
+	rec := doJSONAs(t, s, http.MethodPost, "/api/admin/fetch/cancel", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("cancel without cycle status = %d, want 200", rec.Code)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode cancel: %v", err)
+	}
+	if body["cancelled"] != false {
+		t.Errorf("cancelled = %v, want false when no cycle", body["cancelled"])
+	}
+
+	// Simulate an in-flight fetch by stashing a cancel func, then cancel.
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.fetchMu.Lock()
+	s.fetchCancel = cancel
+	s.fetchMu.Unlock()
+
+	rec = doJSONAs(t, s, http.MethodPost, "/api/admin/fetch/cancel", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("cancel active status = %d, want 200", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode cancel: %v", err)
+	}
+	if body["cancelled"] != true {
+		t.Errorf("cancelled = %v, want true when cycle active", body["cancelled"])
+	}
+
+	// Requires auth.
+	if rec := doJSON(t, s, http.MethodPost, "/api/admin/fetch/cancel", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("cancel without token = %d, want 401", rec.Code)
+	}
+}
+
+func TestSettingsEndpoints(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	// GET defaults
+	rec := doJSONAs(t, s, http.MethodGet, "/api/admin/settings", nil, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("get settings status = %d", rec.Code)
+	}
+	var got models.ScoreThresholds
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if got.HighMin != 80 || got.MediumMin != 60 || got.LowMax != 59 {
+		t.Errorf("default thresholds = %+v, want 80/60/59", got)
+	}
+
+	// PUT new thresholds
+	rec = doJSONAs(t, s, http.MethodPut, "/api/admin/settings", models.ScoreThresholds{
+		LowMax: 49, MediumMin: 50, MediumMax: 74, HighMin: 75,
+	}, token)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put settings status = %d", rec.Code)
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode settings: %v", err)
+	}
+	if got.HighMin != 75 || got.MediumMin != 50 {
+		t.Errorf("updated thresholds = %+v, want 75/50", got)
+	}
+
+	// Requires auth
+	if rec := doJSON(t, s, http.MethodGet, "/api/admin/settings", nil); rec.Code != http.StatusUnauthorized {
+		t.Errorf("get settings without token = %d, want 401", rec.Code)
 	}
 }

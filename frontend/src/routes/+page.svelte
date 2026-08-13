@@ -71,7 +71,7 @@
 						<span class="font-mono text-slate-500">•</span>
 						<span class="font-mono text-slate-400">{formatDate(featuredArticle.published_at)}</span>
 						<span class="font-mono text-slate-500">•</span>
-						<span class="font-mono text-slate-400">{getReadingTime(featuredArticle.content)}</span>
+						<span class="font-mono text-slate-400">{getReadingTime(featuredArticle.summary)}</span>
 					</div>
 
 					<!-- Hero Headline -->
@@ -216,7 +216,7 @@
 						<div class="flex items-center space-x-2 font-mono text-[10px] text-slate-500">
 							<span>{formatDate(post.published_at)}</span>
 							<span>•</span>
-							<span>{getReadingTime(post.content)}</span>
+							<span>{getReadingTime(post.summary)}</span>
 						</div>
 
 						<!-- Title -->

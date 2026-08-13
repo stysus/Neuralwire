@@ -326,3 +326,64 @@ func TestFirstImage(t *testing.T) {
 		})
 	}
 }
+
+func TestUpgradeImageURL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "contentful low res gets upgraded",
+			in:   "https://images.ctfassets.net/space/asset/cover.webp?w=300&q=30",
+			want: "https://images.ctfassets.net/space/asset/cover.webp?fm=webp&q=80&w=1600",
+		},
+		{
+			name: "contentful no params gets defaults",
+			in:   "https://images.ctfassets.net/space/asset/cover.jpg",
+			want: "https://images.ctfassets.net/space/asset/cover.jpg?fm=webp&q=80&w=1600",
+		},
+		{
+			name: "imgix",
+			in:   "https://example.imgix.net/photo.jpg?w=200&q=40",
+			want: "https://example.imgix.net/photo.jpg?auto=compress%2Cformat&q=80&w=1600",
+		},
+		{
+			name: "cloudinary",
+			in:   "https://res.cloudinary.com/demo/image/upload/w_300/v1/sample.jpg",
+			want: "https://res.cloudinary.com/demo/image/upload/w_300/v1/sample.jpg?f=auto&q=auto&w=1600",
+		},
+		{
+			name: "unsplash",
+			in:   "https://images.unsplash.com/photo-123?w=600&q=50&auto=format",
+			want: "https://images.unsplash.com/photo-123?auto=format&q=80&w=1600",
+		},
+		{
+			name: "googleusercontent path sizing",
+			in:   "https://lh3.googleusercontent.com/abc123=w300-h200-p",
+			want: "https://lh3.googleusercontent.com/abc123=s1600",
+		},
+		{
+			name: "wp.com resize",
+			in:   "https://github.blog/wp-content/uploads/2026/08/f.png?resize=1024%2C576",
+			want: "https://github.blog/wp-content/uploads/2026/08/f.png?resize=1600%2C900",
+		},
+		{
+			name: "unknown host untouched",
+			in:   "https://cdn.example.com/img.png?w=100",
+			want: "https://cdn.example.com/img.png?w=100",
+		},
+		{
+			name: "empty",
+			in:   "",
+			want: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := UpgradeImageURL(tt.in); got != tt.want {
+				t.Errorf("UpgradeImageURL(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}

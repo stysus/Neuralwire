@@ -15,6 +15,7 @@ import (
 
 	"github.com/mmcdole/gofeed"
 
+	"neuralwire/backend/internal/ai"
 	"neuralwire/backend/internal/models"
 	"neuralwire/backend/internal/scraper"
 )
@@ -69,6 +70,18 @@ func (f *fakeSummarizer) Summarize(_ context.Context, title, content string) str
 	defer f.mu.Unlock()
 	f.contents = append(f.contents, content)
 	return "summary:" + title
+}
+
+// Categorize satisfies the ai.Summarizer interface; the default category is
+// returned so category logic in tests stays deterministic.
+func (f *fakeSummarizer) Categorize(_ context.Context, title, content, defaultCategory string) string {
+	return defaultCategory
+}
+
+// ScoreValue satisfies the ai.Summarizer interface; scoring is disabled in
+// fetch tests so value fields stay at their zero values.
+func (f *fakeSummarizer) ScoreValue(_ context.Context, title, content, source string) (ai.ValueScore, bool) {
+	return ai.ValueScore{}, false
 }
 
 func (f *fakeSummarizer) lastContent() string {
@@ -181,8 +194,13 @@ func TestProcessFeedUsesScrapedContent(t *testing.T) {
 		t.Fatalf("created %d articles, want 1", len(news.created))
 	}
 	created := news.created[0]
-	if created.Content != "FULL BODY TEXT FROM SCRAPER" {
-		t.Errorf("Content = %q, want scraped body", created.Content)
+	// Curator model: scraped body is used only as summarize material and is
+	// never stored.
+	if created.Content != "" {
+		t.Errorf("Content = %q, want empty (curator mode)", created.Content)
+	}
+	if created.Summary == "" {
+		t.Errorf("Summary = %q, want non-empty AI summary", created.Summary)
 	}
 	if created.Title != "Full Article Title" {
 		t.Errorf("Title = %q, want cleaned scraped title", created.Title)
@@ -205,8 +223,8 @@ func TestProcessFeedFallsBackOnScrapeError(t *testing.T) {
 		t.Fatalf("created %d articles, want 1", len(news.created))
 	}
 	created := news.created[0]
-	if created.Content != "<p>Excerpt A</p>" {
-		t.Errorf("Content = %q, want RSS excerpt fallback", created.Content)
+	if created.Content != "" {
+		t.Errorf("Content = %q, want empty (curator mode)", created.Content)
 	}
 	if created.Title != "RSS Title" {
 		t.Errorf("Title = %q, want RSS title", created.Title)
@@ -232,18 +250,18 @@ func TestProcessFeedNoScraperUsesExcerpt(t *testing.T) {
 	if len(news.created) != 2 {
 		t.Fatalf("created %d articles, want 2", len(news.created))
 	}
-	if news.created[0].Content != "Description fallback A" {
-		t.Errorf("Content[0] = %q, want description fallback", news.created[0].Content)
+	// Curator model never stores content; only the summary is kept.
+	if news.created[0].Content != "" || news.created[1].Content != "" {
+		t.Errorf("Content not empty in curator mode: %q / %q", news.created[0].Content, news.created[1].Content)
 	}
-	if news.created[1].Content != "<p>Desc B</p>" {
-		t.Errorf("Content[1] = %q, want content field", news.created[1].Content)
+	if news.created[0].Summary != "summary:T" || news.created[1].Summary != "summary:T2" {
+		t.Errorf("summaries = %q / %q, want AI summaries", news.created[0].Summary, news.created[1].Summary)
 	}
 }
 
 func TestProcessFeedScrapeBudget(t *testing.T) {
 	scraperImpl := &fakeScraper{result: &scraper.Article{Title: "Scraped", Content: "FULL"}}
 	f := newTestFetcher(scraperImpl, 2, nil)
-
 	src := f.sources.(*fakeSourceStore)
 	feed := testFeed()
 	for i := 0; i < 5; i++ {
@@ -264,11 +282,56 @@ func TestProcessFeedScrapeBudget(t *testing.T) {
 	if len(news.created) != 5 {
 		t.Fatalf("created %d articles, want 5", len(news.created))
 	}
-	if news.created[0].Content != "FULL" || news.created[1].Content != "FULL" {
-		t.Errorf("newest items should be scraped, got %q / %q", news.created[0].Content, news.created[1].Content)
+	// The scrape budget still controls which items get full-content scraping,
+	// but the stored content is always empty in curator mode.
+	for i := 0; i < 5; i++ {
+		if news.created[i].Content != "" {
+			t.Errorf("Content[%d] = %q, want empty (curator mode)", i, news.created[i].Content)
+		}
 	}
-	if news.created[2].Content != "Excerpt 2" || news.created[4].Content != "Excerpt 4" {
-		t.Errorf("items beyond budget should fall back, got %q / %q", news.created[2].Content, news.created[4].Content)
+}
+
+func TestProcessFeedInsertBudget(t *testing.T) {
+	// maxInsert caps the total drafts stored per source, even when fallback
+	// excerpts would otherwise pass the quality gate.
+	f := newTestFetcher(nil, 20, nil)
+	f.maxInsert = 3
+
+	src := f.sources.(*fakeSourceStore)
+	feed := testFeed()
+	for i := 0; i < 5; i++ {
+		feed.Items = append(feed.Items, testItem(
+			"Story "+itoa(i),
+			"https://example.com/"+itoa(i),
+			"Long enough excerpt number "+itoa(i),
+		))
+	}
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+
+	news := f.news.(*fakeNewsStore)
+	if len(news.created) != 3 {
+		t.Errorf("created %d articles, want 3 (insert budget)", len(news.created))
+	}
+}
+
+func TestProcessFeedInsertBudgetZeroMeansUnlimited(t *testing.T) {
+	f := newTestFetcher(nil, 20, nil)
+	f.maxInsert = 0
+
+	src := f.sources.(*fakeSourceStore)
+	feed := testFeed(
+		testItem("A", "https://example.com/a", "Excerpt A"),
+		testItem("B", "https://example.com/b", "Excerpt B"),
+	)
+	if _, err := f.processFeed(context.Background(), src.sources[0], feed); err != nil {
+		t.Fatalf("processFeed: %v", err)
+	}
+
+	news := f.news.(*fakeNewsStore)
+	if len(news.created) != 2 {
+		t.Errorf("created %d articles, want 2 (unlimited)", len(news.created))
 	}
 }
 

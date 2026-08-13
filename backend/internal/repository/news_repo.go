@@ -4,6 +4,7 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"neuralwire/backend/internal/models"
@@ -21,7 +22,9 @@ func NewNewsRepository(db *sql.DB) *NewsRepository {
 }
 
 const newsColumns = `id, title, slug, url, source, category, summary,
-	content, image_url, status, published_at, created_at`
+	content, image_url, status, published_at, created_at,
+	value_score, value_breakdown, value_confidence, value_recommendation,
+	value_reason, value_label, value_method`
 
 // Create inserts a draft article and returns its ID. The slug is derived
 // from the title and made unique in the database.
@@ -32,10 +35,14 @@ func (r *NewsRepository) Create(n models.News) (int64, error) {
 	}
 
 	res, err := r.db.Exec(`
-		INSERT INTO news (title, slug, url, source, category, summary, content, image_url, status)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO news (title, slug, url, source, category, summary, content, image_url, status,
+			value_score, value_breakdown, value_confidence, value_recommendation,
+			value_reason, value_label, value_method)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		n.Title, uniqueSlug, n.URL, n.Source, n.Category,
 		n.Summary, n.Content, n.ImageURL, string(models.StatusDraft),
+		n.ValueScore, n.ValueBreakdown, n.ValueConfidence, n.ValueRecommendation,
+		n.ValueReason, n.ValueLabel, n.ValueMethod,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("insert news: %w", err)
@@ -118,13 +125,26 @@ func (r *NewsRepository) ListPublished(category string, page, pageSize int) ([]m
 }
 
 // ListAdmin returns a page of articles across all statuses ordered by
-// creation date descending. An empty status filter includes everything.
-func (r *NewsRepository) ListAdmin(status string, page, pageSize int) ([]models.News, int, error) {
-	where := ""
+// creation date descending. An empty filter includes everything.
+func (r *NewsRepository) ListAdmin(status, category, valueLabel string, page, pageSize int) ([]models.News, int, error) {
+	whereClauses := []string{}
 	args := []any{}
 	if status != "" {
-		where = "WHERE status = ?"
+		whereClauses = append(whereClauses, "status = ?")
 		args = append(args, status)
+	}
+	if category != "" {
+		whereClauses = append(whereClauses, "category = ?")
+		args = append(args, category)
+	}
+	if valueLabel != "" {
+		whereClauses = append(whereClauses, "value_label = ?")
+		args = append(args, valueLabel)
+	}
+
+	where := ""
+	if len(whereClauses) > 0 {
+		where = "WHERE " + strings.Join(whereClauses, " AND ")
 	}
 
 	var total int
@@ -179,10 +199,53 @@ func (r *NewsRepository) SetStatus(id int64, status models.NewsStatus) error {
 	return nil
 }
 
+// Update updates an article's fields.
+func (r *NewsRepository) Update(id int64, n models.News) error {
+	existing, err := r.GetByID(id)
+	if err != nil {
+		return err
+	}
+	if existing == nil {
+		return fmt.Errorf("news not found")
+	}
+
+	uniqueSlug := existing.Slug
+	if existing.Title != n.Title {
+		uniqueSlug, err = slug.Unique(slug.FromTitle(n.Title), r.slugExists)
+		if err != nil {
+			return fmt.Errorf("unique slug: %w", err)
+		}
+	}
+
+	_, err = r.db.Exec(`
+		UPDATE news
+		SET title = ?, slug = ?, category = ?, summary = ?, content = ?, image_url = ?,
+			value_score = ?, value_breakdown = ?, value_confidence = ?,
+			value_recommendation = ?, value_reason = ?, value_label = ?, value_method = ?
+		WHERE id = ?`,
+		n.Title, uniqueSlug, n.Category, n.Summary, n.Content, n.ImageURL,
+		n.ValueScore, n.ValueBreakdown, n.ValueConfidence, n.ValueRecommendation,
+		n.ValueReason, n.ValueLabel, n.ValueMethod,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("update news: %w", err)
+	}
+	return nil
+}
+
 // Delete removes an article.
 func (r *NewsRepository) Delete(id int64) error {
 	if _, err := r.db.Exec(`DELETE FROM news WHERE id = ?`, id); err != nil {
 		return fmt.Errorf("delete news: %w", err)
+	}
+	return nil
+}
+
+// DeleteByStatus removes all articles matching a specific status (e.g. draft, published).
+func (r *NewsRepository) DeleteByStatus(status string) error {
+	if _, err := r.db.Exec(`DELETE FROM news WHERE status = ?`, status); err != nil {
+		return fmt.Errorf("delete news by status: %w", err)
 	}
 	return nil
 }
@@ -201,6 +264,8 @@ func scanNews(s scanner) (*models.News, error) {
 	if err := s.Scan(
 		&n.ID, &n.Title, &n.Slug, &n.URL, &n.Source, &n.Category,
 		&n.Summary, &n.Content, &n.ImageURL, &status, &publishedAt, &createdAt,
+		&n.ValueScore, &n.ValueBreakdown, &n.ValueConfidence, &n.ValueRecommendation,
+		&n.ValueReason, &n.ValueLabel, &n.ValueMethod,
 	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil

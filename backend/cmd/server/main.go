@@ -18,6 +18,7 @@ import (
 	"neuralwire/backend/internal/database"
 	"neuralwire/backend/internal/fetcher"
 	"neuralwire/backend/internal/repository"
+	"neuralwire/backend/internal/scoring"
 	"neuralwire/backend/internal/scraper"
 )
 
@@ -45,6 +46,7 @@ func main() {
 	newsRepo := repository.NewNewsRepository(db)
 	categoryRepo := repository.NewCategoryRepository(db)
 	sourceRepo := repository.NewRSSSourceRepository(db)
+	settingsRepo := repository.NewSettingsRepository(db)
 
 	if cfg.AdminUsername == "admin" && cfg.AdminPassword == "admin123" {
 		logger.Printf("WARNING: using default admin credentials. Set ADMIN_USERNAME/ADMIN_PASSWORD before deployment.")
@@ -59,24 +61,40 @@ func main() {
 		Logger:  logger,
 	})
 
+	imageGenerator := ai.NewImageGenerator(cfg.AISummaryAPIKey, cfg.AISummaryBaseURL, logger)
+
+	// Advisory news-value scoring (AI + heuristic weighted). Admins remain
+	// the final decision makers; scoring never auto-publishes.
+	scoreService := scoring.NewScoreService(
+		summarizer,
+		scoring.NewRuleScorer(),
+		settingsRepo,
+	)
+
 	rssFetcher := fetcher.NewFetcher(fetcher.FetcherOptions{
-		Sources:    sourceRepo,
-		News:       newsRepo,
-		Summarizer: summarizer,
+		Sources:        sourceRepo,
+		News:           newsRepo,
+		Summarizer:     summarizer,
+		ImageGenerator: imageGenerator,
 		Scraper: scraper.New(scraper.Options{
 			Timeout:   cfg.ScrapeTimeout,
 			UserAgent: "Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.example)",
 			Logger:    logger,
 		}),
-		ScrapeMax:       cfg.ScrapeMaxPerSource,
-		MinContentChars: cfg.ScrapeMinContentChars,
-		HTTPClient:      &http.Client{Timeout: 30 * time.Second},
-		Logger:          logger,
+		ScrapeMax:          cfg.ScrapeMaxPerSource,
+		MinContentChars:    cfg.ScrapeMinContentChars,
+		ScrapeDelayMin:     cfg.ScrapeDelayMin,
+		ScrapeDelayMax:     cfg.ScrapeDelayMax,
+		MaxInsertPerSource: cfg.ScrapeMaxInsertPerSource,
+		Scorer:             scoreService,
+		HTTPClient:         &http.Client{Timeout: 30 * time.Second},
+		Logger:             logger,
 	})
 
 	srv := api.NewServer(api.ServerOptions{
 		NewsRepo:     newsRepo,
 		CategoryRepo: categoryRepo,
+		SettingsRepo: settingsRepo,
 		AllowOrigins: cfg.CORSAllowOrigins,
 		Auth:         authManager,
 		AdminUser:    cfg.AdminUsername,

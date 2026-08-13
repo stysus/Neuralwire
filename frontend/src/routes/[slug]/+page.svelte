@@ -92,20 +92,15 @@
 			<span class="font-mono text-slate-600">•</span>
 			<span class="font-mono text-slate-400">{formatDate(article.published_at)}</span>
 			<span class="font-mono text-slate-600">•</span>
-			<span class="font-mono text-slate-400">{getReadingTime(article.content)}</span>
+			<span class="font-mono text-[#22D3EE] font-bold">AI DIGEST SUMMARY</span>
 		</div>
 
 		<!-- Title & Subtitle -->
 		<h1
-			class="mb-6 font-serif text-3xl leading-tight font-medium text-white sm:text-4xl md:text-5xl"
+			class="mb-8 font-serif text-3xl leading-tight font-medium text-white sm:text-4xl md:text-5xl"
 		>
 			{article.title}
 		</h1>
-		<p
-			class="mb-8 border-b border-[rgba(255,255,255,0.08)] pb-8 font-sans text-base leading-relaxed font-light text-slate-300 md:text-lg"
-		>
-			{article.summary}
-		</p>
 
 		<!-- Large Main Image -->
 		<div
@@ -123,15 +118,54 @@
 				SOURCE: {article.source.toUpperCase()} // RESOLVED_IMAGE
 			</div>
 		</div>
+		<!-- Content Presentation -->
+		<div class="mb-16 space-y-10">
+			<!-- AI Digest Highlight Card (curated brief is the main content) -->
+			{#if article.summary}
+				<div
+					class="rounded-2xl border border-[#22D3EE]/15 bg-[#22D3EE]/3 p-6 backdrop-blur-sm md:p-8"
+				>
+					<span class="font-mono text-[10px] font-bold tracking-wider text-[#22D3EE] block mb-3">
+						// NEURAL AI DIGEST
+					</span>
+					<div
+						class="article-content max-w-none font-sans text-base leading-relaxed font-light text-slate-200 md:text-lg"
+					>
+						<p>{article.summary}</p>
+					</div>
+				</div>
+			{:else}
+				<div
+					class="rounded-2xl border border-[#22D3EE]/15 bg-[#22D3EE]/3 p-6 backdrop-blur-sm md:p-8"
+				>
+					<span class="font-mono text-[10px] font-bold tracking-wider text-[#22D3EE] block mb-3">
+						// NEURAL AI DIGEST
+					</span>
+					<div
+						class="article-content max-w-none font-sans text-base leading-relaxed font-light text-slate-200 md:text-lg"
+					>
+						<p>This brief is being prepared. Read the full story at the original source below.</p>
+					</div>
+				</div>
+			{/if}
 
-		<!-- Article Content (Rich HTML styling) -->
-		<div
-			class="article-content mb-16 max-w-none font-sans text-sm leading-relaxed font-light text-slate-300 md:text-base"
-		>
-			<!-- We custom style raw HTML content via CSS nested classes -->
-			{@html article.content}
+			<!-- External Source CTA Card -->
+			<div class="my-12 rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/40 p-6 md:p-8 text-center backdrop-blur-sm relative overflow-hidden">
+				<div class="pointer-events-none absolute top-[-50%] right-[-50%] h-64 w-64 rounded-full bg-[#22D3EE]/3 blur-3xl"></div>
+				<h3 class="font-mono text-[10px] font-bold tracking-widest text-[#22D3EE] uppercase mb-3">// ORIGINAL COVERAGE</h3>
+				<p class="font-sans text-xs text-slate-400 mb-6 max-w-lg mx-auto leading-relaxed">
+					For interactive features, code blocks, or full research diagrams, read the original publication.
+				</p>
+				<a
+					href={article.url}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="inline-block rounded-xl bg-[#22D3EE] px-8 py-3.5 font-mono text-xs font-bold tracking-widest text-[#0A0E17] uppercase hover:bg-[#22D3EE]/90 transition-all hover:scale-[1.02] shadow-[0_0_15px_rgba(34,211,238,0.2)] active:scale-[0.98]"
+				>
+					READ FULL STORY ON {article.source.toUpperCase()}
+				</a>
+			</div>
 		</div>
-
 		<!-- Share & Source telemetry footer -->
 		<div
 			class="mb-16 flex flex-col items-center justify-between gap-4 border-y border-[rgba(255,255,255,0.08)] py-6 font-mono text-xs text-slate-500 sm:flex-row"
