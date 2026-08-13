@@ -7,6 +7,15 @@
 
 	const category = $derived(data.category);
 	const articles = $derived(data.news as News[]);
+	let visibleCount = $state(15);
+
+	$effect(() => {
+		if (category.slug) {
+			visibleCount = 15;
+		}
+	});
+
+	const visibleFeed = $derived(articles.slice(0, visibleCount));
 
 	function formatDate(dateStr: string) {
 		const d = new Date(dateStr);
@@ -22,6 +31,14 @@
 		const minutes = Math.ceil(words / 220);
 		return `${minutes} min read`;
 	}
+
+	function collapseFeed() {
+		visibleCount = 15;
+		const element = document.getElementById('category-feed');
+		if (element) {
+			element.scrollIntoView({ behavior: 'smooth' });
+		}
+	}
 </script>
 
 <svelte:head>
@@ -32,7 +49,7 @@
 	/>
 </svelte:head>
 
-<section class="mx-auto max-w-7xl flex-grow px-4 py-12 sm:px-6 md:py-16 lg:px-8">
+<section id="category-feed" class="mx-auto max-w-7xl flex-grow px-4 py-12 sm:px-6 md:py-16 lg:px-8">
 	<!-- Category Page Header -->
 	<div class="mb-12 border-b border-[rgba(255,255,255,0.08)] pb-8">
 		<span class="tag-mono mb-2 block text-xs font-bold tracking-widest text-[#22D3EE]"
@@ -44,9 +61,9 @@
 	</div>
 
 	<!-- Articles Grid -->
-	{#if articles.length > 0}
+	{#if visibleFeed.length > 0}
 		<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 lg:gap-8 2xl:grid-cols-5">
-			{#each articles as post}
+			{#each visibleFeed as post}
 				<article
 					class="group glow-hover flex flex-col overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/25"
 				>
@@ -110,6 +127,52 @@
 				</article>
 			{/each}
 		</div>
+
+		{#if articles.length > visibleCount}
+			<div class="mt-12 flex justify-center gap-4">
+				<button
+					onclick={() => (visibleCount += 15)}
+					class="cursor-pointer rounded-xl border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-8 py-3 font-mono text-xs font-bold tracking-widest text-[#22D3EE] uppercase transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white"
+				>
+					Load More
+				</button>
+				{#if visibleCount > 15}
+					<button
+						onclick={collapseFeed}
+						class="cursor-pointer rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 px-8 py-3 font-mono text-xs font-bold tracking-widest text-[#E11D48] uppercase transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white"
+					>
+						Hide Feed
+					</button>
+				{/if}
+			</div>
+		{:else if visibleCount > 15}
+			<div class="mt-12 flex justify-center">
+				<button
+					onclick={collapseFeed}
+					class="cursor-pointer rounded-xl border border-[#E11D48]/30 bg-[#E11D48]/5 px-8 py-3 font-mono text-xs font-bold tracking-widest text-[#E11D48] uppercase transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white"
+				>
+					Hide Feed
+				</button>
+			</div>
+		{/if}
+
+		{#if visibleCount > 15}
+			<button
+				onclick={collapseFeed}
+				class="fixed right-6 bottom-6 z-40 flex h-10 cursor-pointer items-center justify-center space-x-2 rounded-full border border-[#E11D48]/40 bg-[#0A0E17]/90 px-4 py-2 font-mono text-[10px] font-bold tracking-widest text-[#E11D48] shadow-[0_0_15px_rgba(225,29,72,0.15)] backdrop-blur-sm transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white active:scale-95"
+				title="Collapse Feed"
+			>
+				<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						stroke-width="2.5"
+						d="M5 15l7-7 7 7"
+					/>
+				</svg>
+				<span>COLLAPSE FEED</span>
+			</button>
+		{/if}
 	{:else}
 		<!-- Empty State -->
 		<div

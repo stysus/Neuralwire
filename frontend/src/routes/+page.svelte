@@ -116,7 +116,9 @@
 			{#key featuredArticle.id}
 				<div class="hero-slide grid grid-cols-1 items-center gap-8 lg:grid-cols-12 lg:gap-12">
 					<!-- Hero Text Details -->
-					<div class="flex flex-col space-y-4 md:space-y-6 lg:col-span-7">
+					<div
+						class="flex min-h-[340px] flex-col justify-center space-y-4 md:space-y-6 lg:col-span-7 lg:min-h-[380px]"
+					>
 						<!-- Category and Meta -->
 						<div class="flex flex-wrap items-center gap-3 text-xs">
 							<a
@@ -137,7 +139,7 @@
 						<!-- Hero Headline -->
 						<a href="/{featuredArticle.slug}" class="group">
 							<h1
-								class="font-serif text-3xl leading-tight font-medium tracking-tight text-white transition-colors group-hover:text-[#22D3EE]/90 sm:text-4xl md:text-5xl lg:text-6xl"
+								class="line-clamp-2 font-serif text-3xl leading-tight font-medium tracking-tight text-white transition-colors group-hover:text-[#22D3EE]/90 sm:text-4xl md:text-5xl lg:text-6xl"
 							>
 								{featuredArticle.title}
 							</h1>
@@ -145,7 +147,7 @@
 
 						<!-- Hero Summary -->
 						<p
-							class="max-w-2xl font-sans text-sm leading-relaxed font-light text-slate-400 md:text-base"
+							class="line-clamp-3 max-w-2xl font-sans text-sm leading-relaxed font-light text-slate-400 md:text-base"
 						>
 							{featuredArticle.summary}
 						</p>

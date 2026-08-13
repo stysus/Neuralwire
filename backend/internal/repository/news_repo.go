@@ -4,10 +4,12 @@ package repository
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"neuralwire/backend/internal/models"
+	"neuralwire/backend/internal/scoring"
 	"neuralwire/backend/internal/slug"
 )
 
@@ -377,6 +379,108 @@ func (r *NewsRepository) ListTrending(window TrendingWindow, limit int) ([]model
 		return nil, fmt.Errorf("iterate trending: %w", err)
 	}
 	return news, nil
+}
+
+// ListRelated returns the published articles most similar to the given one,
+// ranked by a TF-IDF weighted relevance score (category + source + keyword
+// overlap where rare keywords weigh more). The current article is excluded.
+// Limit is clamped to 1-50.
+func (r *NewsRepository) ListRelated(currentID int64, limit int) ([]models.News, error) {
+	if limit <= 0 {
+		limit = 12
+	}
+	if limit > 50 {
+		limit = 50
+	}
+
+	current, err := r.GetByID(currentID)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, nil
+	}
+
+	rows, err := r.db.Query(`
+		SELECT `+newsColumns+`
+		FROM news
+		WHERE status = ? AND id != ?
+		ORDER BY published_at DESC, id DESC`, string(models.StatusPublished), currentID)
+	if err != nil {
+		return nil, fmt.Errorf("list related candidates: %w", err)
+	}
+	defer rows.Close()
+
+	var candidates []models.News
+	for rows.Next() {
+		n, err := scanNews(rows)
+		if err != nil {
+			return nil, err
+		}
+		candidates = append(candidates, *n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate related candidates: %w", err)
+	}
+
+	// TF-IDF weighting: compute document frequency of each keyword across
+	// the whole candidate corpus so rare/meaningful terms dominate.
+	docFreq := make(map[string]int)
+	for _, c := range candidates {
+		kw := scoring.RelatedKeywords(c.Title + " " + c.Summary)
+		for k := range kw {
+			docFreq[k]++
+		}
+	}
+	total := len(candidates)
+	weight := func(kw string) float64 {
+		df := docFreq[kw]
+		if df <= 0 {
+			return 0
+		}
+		return 1 + float64(total)/float64(df) // common words approach 1, rare words grow
+	}
+
+	currentText := current.Title + " " + current.Summary
+	curKW := scoring.RelatedKeywords(currentText)
+
+	type scored struct {
+		news  models.News
+		score float64
+	}
+	var ranked []scored
+	for _, c := range candidates {
+		s := 0.0
+		if strings.EqualFold(strings.TrimSpace(current.Category), strings.TrimSpace(c.Category)) {
+			s += 40
+		}
+		if strings.EqualFold(strings.TrimSpace(current.Source), strings.TrimSpace(c.Source)) {
+			s += 10
+		}
+		candKW := scoring.RelatedKeywords(c.Title + " " + c.Summary)
+		for k := range curKW {
+			if _, ok := candKW[k]; ok {
+				s += 2 * weight(k)
+			}
+		}
+		if s > 0 {
+			ranked = append(ranked, scored{news: c, score: s})
+		}
+	}
+
+	// Stable sort: score desc, then newest first.
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].score != ranked[j].score {
+			return ranked[i].score > ranked[j].score
+		}
+		return ranked[i].news.ID > ranked[j].news.ID
+	})
+
+	out := make([]models.News, 0, limit)
+	for i := 0; i < len(ranked) && i < limit; i++ {
+		out = append(out, ranked[i].news)
+	}
+	return out, nil
 }
 
 // scanner is satisfied by *sql.Row and *sql.Rows.

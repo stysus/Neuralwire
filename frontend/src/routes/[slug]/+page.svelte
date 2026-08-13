@@ -8,6 +8,7 @@
 
 	const article = $derived(data.article as News);
 	const related = $derived(data.related as News[]);
+	const displayItems = $derived([...related, ...related, ...related]);
 
 	function formatDate(dateStr: string) {
 		const d = new Date(dateStr);
@@ -35,6 +36,116 @@
 			formSubmitted = true;
 			opinion = '';
 			email = '';
+		}
+	}
+
+	let sliderContainer = $state<HTMLDivElement>();
+
+	$effect(() => {
+		if (related.length > 0 && sliderContainer) {
+			const cards = Array.from(sliderContainer.children) as HTMLElement[];
+			if (cards.length >= related.length * 3) {
+				sliderContainer.scrollLeft = cards[related.length].offsetLeft;
+			}
+		}
+	});
+
+	function handleScroll() {
+		if (!sliderContainer || related.length === 0) return;
+		const cards = Array.from(sliderContainer.children) as HTMLElement[];
+		if (cards.length < related.length * 3) return;
+
+		const setWidth = cards[related.length].offsetLeft;
+		const maxScroll = sliderContainer.scrollWidth - sliderContainer.clientWidth;
+		const currentScroll = sliderContainer.scrollLeft;
+
+		// Silent wrap around when reaching the absolute boundaries
+		if (currentScroll <= 10) {
+			sliderContainer.scrollTo({
+				left: currentScroll + setWidth,
+				behavior: 'instant' as ScrollBehavior
+			});
+		} else if (currentScroll >= maxScroll - 10) {
+			sliderContainer.scrollTo({
+				left: currentScroll - setWidth,
+				behavior: 'instant' as ScrollBehavior
+			});
+		}
+	}
+
+	function scrollLeft() {
+		if (!sliderContainer || related.length === 0) return;
+		const cards = Array.from(sliderContainer.children) as HTMLElement[];
+		if (cards.length < related.length * 3) return;
+
+		const firstSetEnd = cards[related.length].offsetLeft;
+		const secondSetEnd = cards[related.length * 2].offsetLeft;
+		const setWidth = secondSetEnd - firstSetEnd;
+		let currentScroll = sliderContainer.scrollLeft;
+
+		// Wrap instantly first if we are outside the middle set
+		if (currentScroll < firstSetEnd - 10) {
+			currentScroll += setWidth;
+			sliderContainer.scrollTo({ left: currentScroll, behavior: 'instant' as ScrollBehavior });
+		} else if (currentScroll >= secondSetEnd - 10) {
+			currentScroll -= setWidth;
+			sliderContainer.scrollTo({ left: currentScroll, behavior: 'instant' as ScrollBehavior });
+		}
+
+		// Find the active index closest to the current scroll
+		let activeIndex = 0;
+		let minDiff = Infinity;
+		cards.forEach((card, idx) => {
+			const diff = Math.abs(card.offsetLeft - currentScroll);
+			if (diff < minDiff) {
+				minDiff = diff;
+				activeIndex = idx;
+			}
+		});
+
+		// Go to previous index
+		const targetIndex = activeIndex - 1;
+		const targetCard = cards[targetIndex];
+		if (targetCard) {
+			sliderContainer.scrollTo({ left: targetCard.offsetLeft, behavior: 'smooth' });
+		}
+	}
+
+	function scrollRight() {
+		if (!sliderContainer || related.length === 0) return;
+		const cards = Array.from(sliderContainer.children) as HTMLElement[];
+		if (cards.length < related.length * 3) return;
+
+		const firstSetEnd = cards[related.length].offsetLeft;
+		const secondSetEnd = cards[related.length * 2].offsetLeft;
+		const setWidth = secondSetEnd - firstSetEnd;
+		let currentScroll = sliderContainer.scrollLeft;
+
+		// Wrap instantly first if we are outside the middle set
+		if (currentScroll < firstSetEnd - 10) {
+			currentScroll += setWidth;
+			sliderContainer.scrollTo({ left: currentScroll, behavior: 'instant' as ScrollBehavior });
+		} else if (currentScroll >= secondSetEnd - 10) {
+			currentScroll -= setWidth;
+			sliderContainer.scrollTo({ left: currentScroll, behavior: 'instant' as ScrollBehavior });
+		}
+
+		// Find the active index closest to the current scroll
+		let activeIndex = 0;
+		let minDiff = Infinity;
+		cards.forEach((card, idx) => {
+			const diff = Math.abs(card.offsetLeft - currentScroll);
+			if (diff < minDiff) {
+				minDiff = diff;
+				activeIndex = idx;
+			}
+		});
+
+		// Go to next index
+		const targetIndex = activeIndex + 1;
+		const targetCard = cards[targetIndex];
+		if (targetCard) {
+			sliderContainer.scrollTo({ left: targetCard.offsetLeft, behavior: 'smooth' });
 		}
 	}
 
@@ -151,7 +262,7 @@
 					class="rounded-2xl border border-[#22D3EE]/15 bg-[#22D3EE]/3 p-6 backdrop-blur-sm md:p-8"
 				>
 					<span class="mb-3 block font-mono text-[10px] font-bold tracking-wider text-[#22D3EE]">
-						// NEURAL AI DIGEST
+						Neural AI Digest
 					</span>
 					<div
 						class="article-content max-w-none font-sans text-base leading-relaxed font-light text-slate-200 md:text-lg"
@@ -164,7 +275,7 @@
 					class="rounded-2xl border border-[#22D3EE]/15 bg-[#22D3EE]/3 p-6 backdrop-blur-sm md:p-8"
 				>
 					<span class="mb-3 block font-mono text-[10px] font-bold tracking-wider text-[#22D3EE]">
-						// NEURAL AI DIGEST
+						Neural AI Digest
 					</span>
 					<div
 						class="article-content max-w-none font-sans text-base leading-relaxed font-light text-slate-200 md:text-lg"
@@ -182,7 +293,7 @@
 					class="pointer-events-none absolute top-[-50%] right-[-50%] h-64 w-64 rounded-full bg-[#22D3EE]/3 blur-3xl"
 				></div>
 				<h3 class="mb-3 font-mono text-[10px] font-bold tracking-widest text-[#22D3EE] uppercase">
-					// ORIGINAL COVERAGE
+					Original Coverage
 				</h3>
 				<p class="mx-auto mb-6 max-w-lg font-sans text-xs leading-relaxed text-slate-400">
 					For interactive features, code blocks, or full research diagrams, read the original
@@ -203,16 +314,14 @@
 			class="mb-16 flex flex-col items-center justify-between gap-4 border-y border-[rgba(255,255,255,0.08)] py-6 font-mono text-xs text-slate-500 sm:flex-row"
 		>
 			<div>
-				<span>TELEMETRY: NW-ID-{article.id}</span>
-				<span class="mx-3">|</span>
-				<span>ORIGIN: {article.source.toUpperCase()}</span>
+				<span>Origin: {article.source}</span>
 			</div>
 
 			<div class="flex items-center space-x-4">
-				<span class="text-slate-400">SHARE:</span>
-				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">[ X ]</button>
-				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">[ LINKEDIN ]</button>
-				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">[ REDDIT ]</button>
+				<span class="text-slate-400">Share:</span>
+				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">X</button>
+				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">LinkedIn</button>
+				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">Reddit</button>
 			</div>
 		</div>
 
@@ -226,7 +335,7 @@
 			></div>
 
 			<span class="tag-mono mb-2 block text-[10px] font-bold tracking-wider text-[#22D3EE]"
-				>// FEEDBACK_RECEIVER_V2.0</span
+				>Feedback Receiver</span
 			>
 			<h3 class="mb-2 font-serif text-xl font-medium text-white">OPINION TRANSMISSION</h3>
 			<p class="mb-6 font-sans text-xs leading-relaxed font-light text-slate-400">
@@ -294,7 +403,7 @@
 								type="submit"
 								class="accent-glow-glow w-full cursor-pointer rounded-xl bg-[#22D3EE] px-6 py-2 font-mono text-xs font-bold tracking-widest text-[#0A0E17] uppercase transition-all hover:bg-[#22D3EE]/90 sm:w-auto"
 							>
-								EXECUTE_SUBMIT
+								Submit Opinion
 							</button>
 						</div>
 					</div>
@@ -306,39 +415,83 @@
 		{#if related.length > 0}
 			<section class="border-t border-[rgba(255,255,255,0.08)] pt-12">
 				<h3 class="mb-6 font-mono text-xs font-bold tracking-widest text-[#22D3EE] uppercase">
-					// RELATED_TRANSMISSIONS
+					Related Transmissions
 				</h3>
-				<div class="grid grid-cols-1 gap-6 md:grid-cols-3">
-					{#each related as post}
-						<article
-							class="group glow-hover flex flex-col overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/20"
-						>
-							<a
-								href="/{post.slug}"
-								class="relative block aspect-[16/10] w-full overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#0A0E17]"
-							>
-								<Image
-									src={post.image_url}
-									content={post.content}
-									alt={post.title}
-									class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
-								/>
-							</a>
 
-							<div class="flex flex-grow flex-col space-y-2 p-4">
-								<div class="font-mono text-[9px] text-slate-500">
-									{formatDate(post.published_at)}
-								</div>
-								<h4
-									class="line-clamp-2 font-serif text-sm leading-snug font-normal text-white transition-colors group-hover:text-[#22D3EE]"
+				<div class="group relative">
+					<!-- Left Scroll Button -->
+					{#if related.length > 3}
+						<button
+							onclick={scrollLeft}
+							class="absolute top-1/2 left-[-20px] z-10 flex h-10 w-10 translate-y-[-50%] cursor-pointer items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-[#0A0E17]/95 text-slate-400 opacity-80 shadow-lg backdrop-blur-sm transition-all group-hover:opacity-100 hover:border-[#22D3EE] hover:text-white md:left-[-24px]"
+							aria-label="Scroll left"
+						>
+							<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2.5"
+									d="M15 19l-7-7 7-7"
+								/>
+							</svg>
+						</button>
+					{/if}
+
+					<!-- Slider Container -->
+					<div
+						bind:this={sliderContainer}
+						onscroll={handleScroll}
+						class="no-scrollbar flex snap-x snap-mandatory gap-6 overflow-x-auto py-2"
+					>
+						{#each displayItems as post}
+							<article
+								class="group glow-hover flex w-full flex-shrink-0 snap-start snap-always flex-col overflow-hidden rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/20 sm:w-[calc(50%-12px)] md:w-[calc(33.333%-16px)]"
+							>
+								<a
+									href="/{post.slug}"
+									class="relative block aspect-[16/10] w-full overflow-hidden border-b border-[rgba(255,255,255,0.08)] bg-[#0A0E17]"
 								>
-									<a href="/{post.slug}">
-										{post.title}
-									</a>
-								</h4>
-							</div>
-						</article>
-					{/each}
+									<Image
+										src={post.image_url}
+										content={post.content}
+										alt={post.title}
+										class="h-full w-full object-cover opacity-75 grayscale transition-all duration-550 group-hover:scale-105 group-hover:opacity-100 group-hover:grayscale-0"
+									/>
+								</a>
+
+								<div class="flex flex-grow flex-col space-y-2 p-4">
+									<div class="font-mono text-[9px] text-slate-500">
+										{formatDate(post.published_at)}
+									</div>
+									<h4
+										class="line-clamp-2 font-serif text-sm leading-snug font-normal text-white transition-colors group-hover:text-[#22D3EE]"
+									>
+										<a href="/{post.slug}">
+											{post.title}
+										</a>
+									</h4>
+								</div>
+							</article>
+						{/each}
+					</div>
+
+					<!-- Right Scroll Button -->
+					{#if related.length > 3}
+						<button
+							onclick={scrollRight}
+							class="absolute top-1/2 right-[-20px] z-10 flex h-10 w-10 translate-y-[-50%] cursor-pointer items-center justify-center rounded-full border border-[rgba(255,255,255,0.08)] bg-[#0A0E17]/95 text-slate-400 opacity-80 shadow-lg backdrop-blur-sm transition-all group-hover:opacity-100 hover:border-[#22D3EE] hover:text-white md:right-[-24px]"
+							aria-label="Scroll right"
+						>
+							<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2.5"
+									d="M9 5l7 7-7 7"
+								/>
+							</svg>
+						</button>
+					{/if}
 				</div>
 			</section>
 		{/if}
@@ -387,5 +540,13 @@
 
 	:global(.article-content em) {
 		color: #ffffff;
+	}
+
+	.no-scrollbar::-webkit-scrollbar {
+		display: none;
+	}
+	.no-scrollbar {
+		-ms-overflow-style: none; /* IE and Edge */
+		scrollbar-width: none; /* Firefox */
 	}
 </style>

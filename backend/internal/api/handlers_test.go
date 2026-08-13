@@ -751,3 +751,51 @@ func TestRecordViewAndTrending(t *testing.T) {
 		t.Errorf("record view missing article status = %d, want 200", rec.Code)
 	}
 }
+
+func TestRelatedNewsEndpoint(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	// Create three articles in the same category plus one in another.
+	base := createPublishedArticle(t, s, token, "Gemma 4 12B multimodal model released by Google DeepMind")
+	_ = createPublishedArticle(t, s, token, "Gemma 4 multimodal model for laptops from DeepMind")
+	_ = createPublishedArticle(t, s, token, "Another gemma multimodal model update")
+	otherCat := createPublishedArticle(t, s, token, "Startup raises funding round")
+
+	rec := doJSON(t, s, http.MethodGet, "/api/news/"+strconv.FormatInt(base.ID, 10)+"/related?limit=10", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("related status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var resp struct {
+		Data []models.News `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode related: %v", err)
+	}
+	if len(resp.Data) == 0 {
+		t.Fatalf("related empty, want >= 1")
+	}
+	// The base article must not appear in its own related list.
+	for _, n := range resp.Data {
+		if n.ID == base.ID {
+			t.Errorf("related contains the current article id %d", base.ID)
+		}
+	}
+	// Articles sharing gemma/multimodal keywords must rank before the
+	// unrelated one, even though the test helper gives every article the same
+	// category and source (so keyword overlap is the only differentiator).
+	var otherIdx = -1
+	for i, n := range resp.Data {
+		if n.ID == otherCat.ID {
+			otherIdx = i
+		}
+	}
+	if otherIdx < 0 {
+		t.Fatalf("unrelated article missing from related list")
+	}
+	for i, n := range resp.Data {
+		if i > otherIdx && strings.Contains(strings.ToLower(n.Title), "gemma") {
+			t.Errorf("gemma article ranked after unrelated one: idx=%d title=%q, otherIdx=%d", i, n.Title, otherIdx)
+		}
+	}
+}

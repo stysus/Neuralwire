@@ -161,6 +161,34 @@ func (s *Server) handleRecordView(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// handleRelatedNews returns published articles most similar to the given one,
+// ranked by relevance (category + source + keyword overlap). Public endpoint.
+func (s *Server) handleRelatedNews(w http.ResponseWriter, r *http.Request) {
+	id, err := pathID(r)
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid news id")
+		return
+	}
+
+	limit := 12
+	if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+
+	news, err := s.newsRepo.ListRelated(id, limit)
+	if err != nil {
+		s.logger.Printf("api: related news %d: %v", id, err)
+		s.writeError(w, http.StatusInternalServerError, "failed to load related news")
+		return
+	}
+	if news == nil {
+		news = []models.News{}
+	}
+	s.writeJSON(w, http.StatusOK, map[string]any{"data": news})
+}
+
 func (s *Server) handleListCategories(w http.ResponseWriter, r *http.Request) {
 	categories, err := s.categoryRepo.List()
 	if err != nil {
