@@ -58,6 +58,7 @@ cycle with `POST /api/admin/fetch` (see below).
 | -------------------- | ----------------------------- | ---------------------------------------------------- |
 | `PORT`               | `8080`                        | HTTP listen port                                     |
 | `DB_PATH`            | `data/neuralwire.db`          | SQLite database file path                            |
+| `USER_AGENT`         | `Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)` | User-Agent for outbound RSS/scrape requests; set a real bot UA + domain before going public |
 | `CORS_ALLOW_ORIGIN`  | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated allowed frontend origins |
 | `AI_SUMMARY_API_KEY` | *(empty)*                     | API key for the OpenAI-compatible summary endpoint   |
 | `AI_SUMMARY_PROVIDER`| `openai`                      | Preset: `openai`, `gemini`, `openrouter`, `groq`, `ollama` |

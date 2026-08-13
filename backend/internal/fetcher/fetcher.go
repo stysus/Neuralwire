@@ -76,7 +76,10 @@ type FetcherOptions struct {
 	// Scorer rates each new article's news value (AI + heuristic weighted)
 	// and attaches an advisory score/label. When nil, drafts are inserted
 	// with a zero score. Scoring never auto-publishes.
-	Scorer     *scoring.ScoreService
+	Scorer *scoring.ScoreService
+	// UserAgent is sent on RSS feed requests. Empty uses the default
+	// NeuralwireBot dev UA.
+	UserAgent  string
 	HTTPClient *http.Client
 	Logger     *log.Logger
 }
@@ -129,7 +132,10 @@ func NewFetcher(opts FetcherOptions) *Fetcher {
 	}
 	parser := gofeed.NewParser()
 	parser.Client = opts.HTTPClient
-	parser.UserAgent = "Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.example)"
+	parser.UserAgent = opts.UserAgent
+	if parser.UserAgent == "" {
+		parser.UserAgent = "Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)"
+	}
 
 	return &Fetcher{
 		sources:         opts.Sources,

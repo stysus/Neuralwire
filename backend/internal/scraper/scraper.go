@@ -65,7 +65,7 @@ func New(opts Options) *Scraper {
 		opts.Timeout = 15 * time.Second
 	}
 	if opts.UserAgent == "" {
-		opts.UserAgent = "Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.example)"
+		opts.UserAgent = "Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)"
 	}
 	if opts.MaxBytes <= 0 {
 		opts.MaxBytes = 5 << 20 // 5 MiB

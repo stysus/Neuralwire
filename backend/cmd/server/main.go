@@ -78,7 +78,7 @@ func main() {
 		ImageGenerator: imageGenerator,
 		Scraper: scraper.New(scraper.Options{
 			Timeout:   cfg.ScrapeTimeout,
-			UserAgent: "Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.example)",
+			UserAgent: cfg.UserAgent,
 			Logger:    logger,
 		}),
 		ScrapeMax:          cfg.ScrapeMaxPerSource,
@@ -87,6 +87,7 @@ func main() {
 		ScrapeDelayMax:     cfg.ScrapeDelayMax,
 		MaxInsertPerSource: cfg.ScrapeMaxInsertPerSource,
 		Scorer:             scoreService,
+		UserAgent:          cfg.UserAgent,
 		HTTPClient:         &http.Client{Timeout: 30 * time.Second},
 		Logger:             logger,
 	})

@@ -15,6 +15,10 @@ type Config struct {
 	Port string
 	// DatabasePath is the SQLite database file path.
 	DatabasePath string
+	// UserAgent is sent with every outbound RSS/scrape request. Defaults to
+	// a browser-like NeuralwireBot dev UA; set a real bot UA with your domain
+	// before going public.
+	UserAgent string
 	// CORSAllowOrigins is the list of allowed frontend origins.
 	CORSAllowOrigins []string
 	// AISummaryAPIKey enables AI summaries when non-empty.
@@ -91,6 +95,7 @@ func Load() (Config, error) {
 	return Config{
 		Port:                     getenv("PORT", "8080"),
 		DatabasePath:             getenv("DB_PATH", "data/neuralwire.db"),
+		UserAgent:                getenv("USER_AGENT", "Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)"),
 		CORSAllowOrigins:         getenvList("CORS_ALLOW_ORIGIN", []string{"http://localhost:5173", "http://127.0.0.1:5173"}),
 		AISummaryAPIKey:          os.Getenv("AI_SUMMARY_API_KEY"),
 		AISummaryModel:           model,
