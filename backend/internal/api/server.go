@@ -14,6 +14,7 @@ import (
 	"neuralwire/backend/internal/auth"
 	"neuralwire/backend/internal/cache"
 	"neuralwire/backend/internal/fetcher"
+	"neuralwire/backend/internal/metrics"
 	"neuralwire/backend/internal/ratelimit"
 	"neuralwire/backend/internal/repository"
 )
@@ -58,6 +59,8 @@ type Server struct {
 	trendingCache *cache.Cache
 	// disableCompression turns off gzip/brotli response compression.
 	disableCompression bool
+	// metrics collects runtime counters exposed via GET /api/metrics.
+	metrics *metrics.Metrics
 }
 
 // ServerOptions configures the API server.
@@ -96,6 +99,9 @@ type ServerOptions struct {
 	// Slog is the structured logger used for request/error logging. When nil,
 	// a discard logger is used so request logging is a no-op.
 	Slog *slog.Logger
+	// Metrics collects runtime counters exposed via GET /api/metrics. When
+	// nil, a fresh collector is used so the endpoint always responds.
+	Metrics *metrics.Metrics
 }
 
 // NewServer builds a Server.
@@ -111,6 +117,9 @@ func NewServer(opts ServerOptions) *Server {
 	}
 	if opts.Slog == nil {
 		opts.Slog = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	if opts.Metrics == nil {
+		opts.Metrics = metrics.New()
 	}
 	if opts.ViewRateWindow <= 0 {
 		opts.ViewRateWindow = time.Minute
@@ -128,6 +137,7 @@ func NewServer(opts ServerOptions) *Server {
 		slog:               opts.Slog,
 		trustProxy:         opts.TrustProxy,
 		disableCompression: opts.DisableCompression,
+		metrics:            opts.Metrics,
 	}
 	if opts.ViewRateLimit > 0 {
 		srv.viewLimiter = ratelimit.New(opts.ViewRateLimit, opts.ViewRateWindow)
@@ -160,6 +170,8 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/healthz", s.handleHealth)
+	mux.HandleFunc("GET /api/metrics", s.handleMetrics)
 	mux.HandleFunc("GET /api/news", s.handleListNews)
 	mux.HandleFunc("GET /api/news/{id}", s.handleGetNews)
 	mux.HandleFunc("GET /api/news/trending", s.handleTrendingNews)

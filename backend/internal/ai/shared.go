@@ -107,6 +107,7 @@ func doChatCompletion(
 	resp, err := client.Do(req)
 	if err != nil {
 		logger.Error("ai: request failed", "error", err)
+		recordAICall(true)
 		return "", false, false
 	}
 	defer resp.Body.Close()
@@ -114,18 +115,22 @@ func doChatCompletion(
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		logger.Error("ai: upstream returned non-200", "status", resp.Status, "body", string(body))
+		recordAICall(true)
 		return "", false, false
 	}
 
 	var parsed chatResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&parsed); err != nil {
 		logger.Error("ai: decode response", "error", err)
+		recordAICall(true)
 		return "", false, false
 	}
 	if len(parsed.Choices) == 0 || strings.TrimSpace(parsed.Choices[0].Message.Content) == "" {
 		logger.Warn("ai: empty response from upstream")
+		recordAICall(true)
 		return "", false, true
 	}
+	recordAICall(false)
 	return strings.TrimSpace(parsed.Choices[0].Message.Content), true, false
 }
 
@@ -159,6 +164,7 @@ func generateImage(
 
 	resp, err := client.Do(req)
 	if err != nil {
+		recordAICall(true)
 		return "", false, false
 	}
 	defer resp.Body.Close()
@@ -166,6 +172,7 @@ func generateImage(
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
 		logger.Error("ai: image generation failed", "status", resp.Status, "body", string(body))
+		recordAICall(true)
 		unsupported := resp.StatusCode == http.StatusNotFound ||
 			resp.StatusCode == http.StatusMethodNotAllowed ||
 			resp.StatusCode == http.StatusNotImplemented
@@ -174,10 +181,13 @@ func generateImage(
 
 	var parsed imageResp
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&parsed); err != nil {
+		recordAICall(true)
 		return "", false, false
 	}
 	if len(parsed.Data) == 0 || parsed.Data[0].URL == "" {
+		recordAICall(true)
 		return "", false, false
 	}
+	recordAICall(false)
 	return parsed.Data[0].URL, false, true
 }

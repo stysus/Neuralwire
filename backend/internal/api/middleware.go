@@ -128,19 +128,23 @@ func (s *Server) originAllowed(origin string) bool {
 }
 
 // log logs each request with status, method, path, client IP, and duration
-// using the structured slog logger. Response bodies are never logged.
+// using the structured slog logger, and records the request in the metrics
+// collector. Response bodies are never logged.
 func (s *Server) log(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(rec, r)
+		dur := time.Since(start)
 		s.slog.Info("request",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"status", rec.status,
-			"duration_ms", time.Since(start).Milliseconds(),
+			"duration_ms", dur.Milliseconds(),
 			"ip", s.clientIP(r),
 		)
+		s.metrics.HTTPRequest(r.Method, rec.status)
+		s.metrics.RequestDuration(dur.Milliseconds())
 	})
 }
 
@@ -172,7 +176,7 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/api/health" || r.Method == http.MethodOptions {
+		if r.URL.Path == "/api/health" || r.URL.Path == "/api/healthz" || r.URL.Path == "/api/metrics" || r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -53,6 +53,11 @@ English by default).
   errors log structured key=value fields. `LOG_LEVEL` filters output and
   `LOG_FORMAT=json` emits JSON lines for log aggregation. Request bodies and
   bearer tokens are never logged
+- **Health & metrics**: `GET /api/health` (and `/api/healthz` alias) ping the
+  database and return `200`/`503` for load balancer health checks;
+  `GET /api/metrics` exposes Prometheus counters (requests by method/status,
+  error count, latency sum/count, fetch cycles, AI calls). Both endpoints are
+  exempt from rate limiting and never cached
 
 ## Requirements
 

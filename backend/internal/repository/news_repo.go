@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"sort"
@@ -21,6 +22,11 @@ type NewsRepository struct {
 // NewNewsRepository creates a NewsRepository.
 func NewNewsRepository(db *sql.DB) *NewsRepository {
 	return &NewsRepository{db: db}
+}
+
+// Ping verifies the database connection is alive, for health checks.
+func (r *NewsRepository) Ping(ctx context.Context) error {
+	return r.db.PingContext(ctx)
 }
 
 const newsColumns = `id, title, slug, url, source, category, summary,

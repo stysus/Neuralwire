@@ -20,6 +20,7 @@ import (
 	"neuralwire/backend/internal/config"
 	"neuralwire/backend/internal/database"
 	"neuralwire/backend/internal/fetcher"
+	"neuralwire/backend/internal/metrics"
 	"neuralwire/backend/internal/repository"
 	"neuralwire/backend/internal/scoring"
 	"neuralwire/backend/internal/scraper"
@@ -123,6 +124,11 @@ func main() {
 		Logger:             slogLogger,
 	})
 
+	// Shared metrics collector: wired into the API server (requests, latency,
+	// fetch cycles) and the AI package (upstream AI calls).
+	appMetrics := metrics.New()
+	ai.SetMetrics(appMetrics)
+
 	srv := api.NewServer(api.ServerOptions{
 		NewsRepo:           newsRepo,
 		CategoryRepo:       categoryRepo,
@@ -133,6 +139,7 @@ func main() {
 		LoginRateLimit:     cfg.LoginRateLimit,
 		GlobalRateLimit:    cfg.GlobalRateLimit,
 		DisableCompression: !cfg.HTTPCompressionEnabled,
+		Metrics:            appMetrics,
 		AllowOrigins:       cfg.CORSAllowOrigins,
 		Auth:               authManager,
 		AdminUser:          cfg.AdminUsername,

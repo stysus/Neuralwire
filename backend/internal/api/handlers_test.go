@@ -124,6 +124,42 @@ func TestHealth(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("health status = %d, want 200", rec.Code)
 	}
+	// Alias endpoint behaves identically.
+	rec2 := doJSON(t, s, http.MethodGet, "/api/healthz", nil)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("healthz status = %d, want 200", rec2.Code)
+	}
+}
+
+func TestMetricsEndpoint(t *testing.T) {
+	s := newTestServer(t)
+	// Fire a couple of requests so the counters are non-zero.
+	doJSON(t, s, http.MethodGet, "/api/news", nil)
+	doJSON(t, s, http.MethodGet, "/api/news/trending", nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/metrics", nil)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("metrics status = %d, want 200", rec.Code)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		"neuralwire_http_requests_total",
+		"neuralwire_http_request_duration_seconds_count",
+		"neuralwire_fetch_cycles_total",
+		"neuralwire_ai_calls_total",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("metrics body missing %q", want)
+		}
+	}
+	// The two news requests plus the metrics request itself should be
+	// reflected in the counter output (>= 3 requests recorded).
+	if !strings.Contains(body, `method="GET"`) {
+		t.Errorf("metrics body missing GET method label:\n%s", body)
+	}
 }
 
 func TestLogin(t *testing.T) {

@@ -33,8 +33,26 @@ type pagination struct {
 	TotalPages int `json:"total_pages"`
 }
 
+// handleHealth reports liveness and, importantly, DB reachability. It returns
+// 200 when the database answers a ping and 503 when it does not, so load
+// balancers and orchestrators can take the instance out of rotation. It is
+// exempt from rate limiting and never cached.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+	if err := s.newsRepo.Ping(ctx); err != nil {
+		s.slog.Error("api: health check failed", "error", err)
+		s.writeJSON(w, http.StatusServiceUnavailable, map[string]string{"status": "unhealthy"})
+		return
+	}
 	s.writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleMetrics renders the runtime counters in Prometheus text exposition
+// format for scraping by monitoring agents.
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	s.metrics.WritePrometheus(w)
 }
 
 func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
@@ -398,6 +416,7 @@ func (s *Server) handleFetchNews(w http.ResponseWriter, r *http.Request) {
 
 	stats, err := s.fetcher.FetchAll(ctx)
 	if err != nil {
+		s.metrics.FetchCycle(true)
 		if errors.Is(err, context.Canceled) {
 			s.logger.Printf("api: fetch cycle cancelled by admin")
 			s.writeError(w, http.StatusConflict, "fetch cycle cancelled")
@@ -406,6 +425,8 @@ func (s *Server) handleFetchNews(w http.ResponseWriter, r *http.Request) {
 		s.logger.Printf("api: fetch cycle finished with errors: %v", err)
 		// Still report partial results; a per-source error is not a total
 		// failure of the manual trigger.
+	} else {
+		s.metrics.FetchCycle(false)
 	}
 	s.writeJSON(w, http.StatusOK, stats)
 }

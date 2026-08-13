@@ -251,7 +251,7 @@ func (s *Server) cacheControl(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		switch {
-		case path == "/api/health" || strings.HasPrefix(path, "/api/admin/"):
+		case path == "/api/health" || path == "/api/healthz" || path == "/api/metrics" || strings.HasPrefix(path, "/api/admin/"):
 			w.Header().Set("Cache-Control", "no-store")
 		case path == "/api/news/trending":
 			w.Header().Set("Cache-Control", "public, max-age=60")
