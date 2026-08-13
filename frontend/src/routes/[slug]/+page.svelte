@@ -117,7 +117,7 @@
 			<span class="font-mono text-slate-600">•</span>
 			<span class="font-mono text-slate-400">{formatDate(article.published_at)}</span>
 			<span class="font-mono text-slate-600">•</span>
-			<span class="font-mono text-[#22D3EE] font-bold">AI DIGEST SUMMARY</span>
+			<span class="font-mono font-bold text-[#22D3EE]">AI DIGEST SUMMARY</span>
 		</div>
 
 		<!-- Title & Subtitle -->
@@ -140,7 +140,7 @@
 			<div
 				class="absolute bottom-4 left-4 rounded-lg border border-[rgba(255,255,255,0.05)] bg-[#0A0E17]/80 px-3 py-1.5 font-mono text-[10px] text-slate-400 backdrop-blur-sm"
 			>
-				SOURCE: {article.source.toUpperCase()} // RESOLVED_IMAGE
+				SOURCE: {article.source.toUpperCase()}
 			</div>
 		</div>
 		<!-- Content Presentation -->
@@ -150,7 +150,7 @@
 				<div
 					class="rounded-2xl border border-[#22D3EE]/15 bg-[#22D3EE]/3 p-6 backdrop-blur-sm md:p-8"
 				>
-					<span class="font-mono text-[10px] font-bold tracking-wider text-[#22D3EE] block mb-3">
+					<span class="mb-3 block font-mono text-[10px] font-bold tracking-wider text-[#22D3EE]">
 						// NEURAL AI DIGEST
 					</span>
 					<div
@@ -163,7 +163,7 @@
 				<div
 					class="rounded-2xl border border-[#22D3EE]/15 bg-[#22D3EE]/3 p-6 backdrop-blur-sm md:p-8"
 				>
-					<span class="font-mono text-[10px] font-bold tracking-wider text-[#22D3EE] block mb-3">
+					<span class="mb-3 block font-mono text-[10px] font-bold tracking-wider text-[#22D3EE]">
 						// NEURAL AI DIGEST
 					</span>
 					<div
@@ -175,17 +175,24 @@
 			{/if}
 
 			<!-- External Source CTA Card -->
-			<div class="my-12 rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/40 p-6 md:p-8 text-center backdrop-blur-sm relative overflow-hidden">
-				<div class="pointer-events-none absolute top-[-50%] right-[-50%] h-64 w-64 rounded-full bg-[#22D3EE]/3 blur-3xl"></div>
-				<h3 class="font-mono text-[10px] font-bold tracking-widest text-[#22D3EE] uppercase mb-3">// ORIGINAL COVERAGE</h3>
-				<p class="font-sans text-xs text-slate-400 mb-6 max-w-lg mx-auto leading-relaxed">
-					For interactive features, code blocks, or full research diagrams, read the original publication.
+			<div
+				class="relative my-12 overflow-hidden rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/40 p-6 text-center backdrop-blur-sm md:p-8"
+			>
+				<div
+					class="pointer-events-none absolute top-[-50%] right-[-50%] h-64 w-64 rounded-full bg-[#22D3EE]/3 blur-3xl"
+				></div>
+				<h3 class="mb-3 font-mono text-[10px] font-bold tracking-widest text-[#22D3EE] uppercase">
+					// ORIGINAL COVERAGE
+				</h3>
+				<p class="mx-auto mb-6 max-w-lg font-sans text-xs leading-relaxed text-slate-400">
+					For interactive features, code blocks, or full research diagrams, read the original
+					publication.
 				</p>
 				<a
 					href={article.url}
 					target="_blank"
 					rel="noopener noreferrer"
-					class="inline-block rounded-xl bg-[#22D3EE] px-8 py-3.5 font-mono text-xs font-bold tracking-widest text-[#0A0E17] uppercase hover:bg-[#22D3EE]/90 transition-all hover:scale-[1.02] shadow-[0_0_15px_rgba(34,211,238,0.2)] active:scale-[0.98]"
+					class="inline-block rounded-xl bg-[#22D3EE] px-8 py-3.5 font-mono text-xs font-bold tracking-widest text-[#0A0E17] uppercase shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all hover:scale-[1.02] hover:bg-[#22D3EE]/90 active:scale-[0.98]"
 				>
 					READ FULL STORY ON {article.source.toUpperCase()}
 				</a>
