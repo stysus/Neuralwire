@@ -253,11 +253,11 @@
 		</div>
 		<div class="flex flex-col items-end gap-2 text-right">
 			<div class="space-y-0.5 font-mono text-[10px] text-slate-500">
-				<div>SYS_TIME: <span class="text-slate-300">{serverTime}</span></div>
-				<div>API_STATUS: <span class="font-bold text-[#22D3EE]">ONLINE</span></div>
+				<div>System Time: <span class="text-slate-300">{serverTime}</span></div>
+				<div>API Status: <span class="font-bold text-[#22D3EE]">Online</span></div>
 				{#if lastFetchInfo}
 					<div>
-						LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span>
+						Last Fetch: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span>
 						<span class="text-slate-400">({lastFetchInfo.result})</span>
 					</div>
 				{/if}
@@ -317,7 +317,7 @@
 				}}
 				class="mt-4 rounded-lg border border-[#E11D48]/30 bg-[#E11D48]/5 px-4 py-1.5 font-mono text-[10px] text-[#E11D48] uppercase transition-colors hover:border-[#E11D48] hover:bg-[#E11D48]/10"
 			>
-				RETRY_QUERY()
+				Retry Query
 			</button>
 		</div>
 	{:else}

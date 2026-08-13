@@ -259,7 +259,7 @@
 					d="M10 19l-7-7m0 0l7-7m-7 7h18"
 				/>
 			</svg>
-			<span>{isEditing ? 'CANCEL_EDIT()' : 'RETURN_TO_PREVIOUS_LEVEL()'}</span>
+			<span>{isEditing ? 'Cancel Edit' : 'Go Back'}</span>
 		</button>
 	</div>
 
@@ -312,21 +312,21 @@
 						disabled={isSaving}
 						class="flex-grow cursor-pointer rounded-xl border border-[#22D3EE] bg-cyan-950/20 px-6 py-2.5 font-mono text-xs font-semibold text-[#22D3EE] transition-all hover:bg-cyan-500 hover:text-[#0A0E17] disabled:opacity-50 sm:flex-none"
 					>
-						{isSaving ? 'SAVING_CHANGES...' : 'SAVE_CHANGES()'}
+						{isSaving ? 'Saving Changes...' : 'Save Changes'}
 					</button>
 				{:else}
 					<button
 						onclick={() => (isEditing = true)}
 						class="flex-grow cursor-pointer rounded-xl border border-slate-500/50 bg-[#0F172A] px-4 py-2 font-mono text-xs font-semibold text-slate-300 transition-all hover:border-[#22D3EE] hover:text-[#22D3EE] sm:flex-none"
 					>
-						{article.status === 'draft' ? 'EDIT_DRAFT()' : 'EDIT_ARTICLE()'}
+						{article.status === 'draft' ? 'Edit Draft' : 'Edit Article'}
 					</button>
 					{#if article.status !== 'published'}
 						<button
 							onclick={handlePublish}
 							class="flex-grow cursor-pointer rounded-xl border border-cyan-500 bg-cyan-950/20 px-4 py-2 font-mono text-xs font-semibold text-[#22D3EE] transition-all hover:bg-cyan-500 hover:text-[#0A0E17] sm:flex-none"
 						>
-							PUBLISH_ARTICLE()
+							Publish Article
 						</button>
 					{/if}
 					{#if article.status !== 'rejected'}
@@ -334,7 +334,7 @@
 							onclick={handleReject}
 							class="flex-grow cursor-pointer rounded-xl border border-amber-500/50 bg-amber-950/10 px-4 py-2 font-mono text-xs font-semibold text-amber-500 transition-all hover:bg-amber-500 hover:text-[#0A0E17] sm:flex-none"
 						>
-							REJECT_ARTICLE()
+							Reject Article
 						</button>
 					{/if}
 				{/if}

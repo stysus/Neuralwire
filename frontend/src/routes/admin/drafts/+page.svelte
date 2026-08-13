@@ -415,11 +415,11 @@
 		<div class="flex flex-col items-end gap-2 text-right">
 			<div class="space-y-0.5 font-mono text-[10px] text-slate-500">
 				<div>
-					TOTAL_PENDING: <span class="font-bold text-slate-300">{totalItems}</span> RECORD(S)
+					Total Pending: <span class="font-bold text-slate-300">{totalItems}</span> Record(s)
 				</div>
 				{#if lastFetchInfo}
 					<div>
-						LAST_FETCH: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span>
+						Last Fetch: <span class="text-[#22D3EE]">{lastFetchInfo.time}</span>
 						<span class="text-slate-400">({lastFetchInfo.result})</span>
 					</div>
 				{/if}
@@ -688,17 +688,17 @@
 					disabled={currentPage === 1}
 					class="cursor-pointer rounded border border-[rgba(255,255,255,0.06)] px-3 py-1.5 transition-colors hover:text-white disabled:opacity-30"
 				>
-					« PREV_PAGE
+					« Prev Page
 				</button>
 
-				<span>PAGE {currentPage} OF {totalPages}</span>
+				<span>Page {currentPage} of {totalPages}</span>
 
 				<button
 					onclick={() => changePage(currentPage + 1)}
 					disabled={currentPage === totalPages}
 					class="cursor-pointer rounded border border-[rgba(255,255,255,0.06)] px-3 py-1.5 transition-colors hover:text-white disabled:opacity-30"
 				>
-					NEXT_PAGE »
+					Next Page »
 				</button>
 			</div>
 		{/if}

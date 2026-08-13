@@ -165,7 +165,7 @@
 		</div>
 		<div class="flex flex-wrap items-center gap-4">
 			<div class="font-mono text-xs text-slate-500">
-				TOTAL_REJECTED: <span class="font-bold text-slate-300">{totalItems}</span> POST(S)
+				Total Rejected: <span class="font-bold text-slate-300">{totalItems}</span> Post(s)
 			</div>
 			<button
 				onclick={handleDeleteAll}
@@ -307,17 +307,17 @@
 					disabled={currentPage === 1}
 					class="cursor-pointer rounded border border-[rgba(255,255,255,0.06)] px-3 py-1.5 transition-colors hover:text-white disabled:opacity-30"
 				>
-					« PREV_PAGE
+					« Prev Page
 				</button>
 
-				<span>PAGE {currentPage} OF {totalPages}</span>
+				<span>Page {currentPage} of {totalPages}</span>
 
 				<button
 					onclick={() => changePage(currentPage + 1)}
 					disabled={currentPage === totalPages}
 					class="cursor-pointer rounded border border-[rgba(255,255,255,0.06)] px-3 py-1.5 transition-colors hover:text-white disabled:opacity-30"
 				>
-					NEXT_PAGE »
+					Next Page »
 				</button>
 			</div>
 		{/if}

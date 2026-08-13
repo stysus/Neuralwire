@@ -75,7 +75,7 @@
 						</span>
 					</a>
 					<span class="font-mono text-slate-600">/</span>
-					<span class="font-mono text-xs tracking-wider text-slate-400">ADMIN_PANEL_v2.0</span>
+					<span class="font-mono text-xs tracking-wider text-slate-400">Admin Panel v2.0</span>
 				</div>
 
 				<!-- Nav Links -->
@@ -120,7 +120,7 @@
 						href="/"
 						class="hidden font-mono text-[10px] text-slate-500 hover:text-slate-300 sm:inline-block"
 					>
-						PUBLIC_SITE →
+						Public Site →
 					</a>
 					<button
 						onclick={handleLogout}

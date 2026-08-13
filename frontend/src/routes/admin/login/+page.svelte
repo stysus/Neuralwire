@@ -90,7 +90,7 @@
 		<form onsubmit={handleLogin} class="space-y-5 font-mono text-xs">
 			<div>
 				<label for="username" class="mb-1.5 block tracking-widest text-slate-400 uppercase"
-					>[SYS_USER]</label
+					>Username</label
 				>
 				<input
 					type="text"
@@ -105,7 +105,7 @@
 
 			<div>
 				<label for="password" class="mb-1.5 block tracking-widest text-slate-400 uppercase"
-					>[SYS_PASS]</label
+					>Password</label
 				>
 				<input
 					type="password"
@@ -128,9 +128,9 @@
 						<div
 							class="h-4 w-4 animate-spin rounded-full border-2 border-[#0A0E17] border-t-transparent"
 						></div>
-						<span>SECURE_CONNECTING...</span>
+						<span>Connecting...</span>
 					{:else}
-						<span>SECURE_CONNECT()</span>
+						<span>Login</span>
 					{/if}
 				</button>
 			</div>
