@@ -269,9 +269,9 @@
 					class="cursor-pointer rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-3 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{#if isScraping}
-						[RUNNING_FETCH...]
+						Running Fetch...
 					{:else}
-						[RUN_FETCH()]
+						Run Fetch
 					{/if}
 				</button>
 			</div>

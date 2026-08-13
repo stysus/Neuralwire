@@ -172,7 +172,7 @@
 				disabled={isDeletingAll || articles.length === 0}
 				class="cursor-pointer rounded border border-[#E11D48]/30 bg-[#E11D48]/5 px-3 py-1.5 font-mono text-xs text-[#E11D48] transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 			>
-				{isDeletingAll ? '[DELETING_ALL...]' : '[DELETE_ALL_PUBLISHED]'}
+				{isDeletingAll ? 'Deleting All...' : 'Delete All Published'}
 			</button>
 		</div>
 	</div>
@@ -282,13 +282,13 @@
 									href="/admin/preview/{item.id}"
 									class="flex-1 rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-2.5 py-1.5 text-center font-mono text-[10px] text-[#22D3EE] transition-all hover:border-[#22D3EE] md:w-full"
 								>
-									[PREVIEW]
+									Preview
 								</a>
 								<button
 									onclick={() => (confirmingDeleteId = item.id)}
 									class="flex-1 cursor-pointer rounded border border-transparent px-2.5 py-1.5 font-mono text-[10px] text-slate-500 transition-all hover:border-[#E11D48]/50 hover:text-[#E11D48] md:w-full"
 								>
-									[DELETE]
+									Delete
 								</button>
 							</div>
 						{/if}

@@ -431,12 +431,12 @@
 					onchange={handleCategoryChange}
 					class="cursor-pointer rounded border border-[rgba(255,255,255,0.12)] bg-[#070B13] px-3 py-1.5 font-mono text-xs text-slate-300 focus:border-[#22D3EE] focus:outline-none"
 				>
-					<option value="">ALL_CATEGORIES</option>
+					<option value="">All Categories</option>
 					<option value="ai">AI</option>
-					<option value="tools">TOOLS</option>
-					<option value="research">RESEARCH</option>
-					<option value="industry">INDUSTRY</option>
-					<option value="machine-learning">MACHINE_LEARNING</option>
+					<option value="tools">Tools</option>
+					<option value="research">Research</option>
+					<option value="industry">Industry</option>
+					<option value="machine-learning">Machine Learning</option>
 				</select>
 
 				<!-- Value score label filter -->
@@ -445,10 +445,10 @@
 					onchange={handleValueLabelChange}
 					class="cursor-pointer rounded border border-[rgba(255,255,255,0.12)] bg-[#070B13] px-3 py-1.5 font-mono text-xs text-slate-300 focus:border-[#22D3EE] focus:outline-none"
 				>
-					<option value="">ALL_VALUES</option>
-					<option value="HIGH">HIGH ≥80</option>
-					<option value="MEDIUM">MEDIUM 60–79</option>
-					<option value="LOW">LOW &lt;60</option>
+					<option value="">All Value Scores</option>
+					<option value="HIGH">High ≥80</option>
+					<option value="MEDIUM">Medium 60–79</option>
+					<option value="LOW">Low &lt;60</option>
 				</select>
 
 				<button
@@ -457,9 +457,9 @@
 					class="cursor-pointer rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-3 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 				>
 					{#if isScraping}
-						[RUNNING_FETCH...]
+						Running Fetch...
 					{:else}
-						[RUN_FETCH()]
+						Run Fetch
 					{/if}
 				</button>
 
@@ -468,7 +468,7 @@
 					disabled={isDeletingAll || articles.length === 0}
 					class="cursor-pointer rounded border border-[#E11D48]/30 bg-[#E11D48]/5 px-3 py-1.5 font-mono text-xs text-[#E11D48] transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 				>
-					{isDeletingAll ? '[DELETING_ALL...]' : '[DELETE_ALL_DRAFTS]'}
+					{isDeletingAll ? 'Deleting All...' : 'Delete All Drafts'}
 				</button>
 			</div>
 		</div>
@@ -651,25 +651,25 @@
 									href="/admin/preview/{item.id}"
 									class="flex-1 rounded border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-2.5 py-1.5 text-center font-mono text-[10px] text-[#22D3EE] transition-all hover:border-[#22D3EE] md:w-full"
 								>
-									[PREVIEW]
+									Preview
 								</a>
 								<button
 									onclick={() => handlePublish(item.id)}
 									class="flex-1 cursor-pointer rounded border border-cyan-500 bg-cyan-950/20 px-2.5 py-1.5 font-mono text-[10px] text-[#22D3EE] transition-all hover:bg-cyan-500 hover:text-[#0A0E17] md:w-full"
 								>
-									PUBLISH()
+									Publish
 								</button>
 								<button
 									onclick={() => handleReject(item.id)}
 									class="flex-1 cursor-pointer rounded border border-amber-500/50 bg-amber-950/10 px-2.5 py-1.5 font-mono text-[10px] text-amber-500 transition-all hover:bg-amber-500 hover:text-[#0A0E17] md:w-full"
 								>
-									REJECT()
+									Reject
 								</button>
 								<button
 									onclick={() => (confirmingDeleteId = item.id)}
 									class="flex-1 cursor-pointer rounded border border-transparent px-2.5 py-1.5 font-mono text-[10px] text-slate-500 transition-all hover:border-[#E11D48]/50 hover:text-[#E11D48] md:w-full"
 								>
-									[DELETE]
+									Delete
 								</button>
 							</div>
 						{/if}

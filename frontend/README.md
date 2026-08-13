@@ -58,6 +58,7 @@ You can preview the production build with `npm run preview`.
 - Removed the `// CHRONICLE_INDEX` suffix from the CATEGORY header.
 - Removed the ` // RESOLVED_IMAGE` debug text suffix from the cover image source label on the article page.
 - Cleaned up tech-themed debug and double-slash snake_case labels in the admin panel.
+- Removed brackets and programmatic uppercase labels from admin navigation, action buttons, and dropdowns.
 - Verified with `npm run check` (0 errors) and formatted with Prettier.
 
 ### 2026-08-13 — Trending / most-read articles (by Codex agent)

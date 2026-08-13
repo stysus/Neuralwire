@@ -86,7 +86,7 @@
 							? 'bg-[#22D3EE]/5 text-[#22D3EE]'
 							: 'text-slate-400 hover:text-white'}"
 					>
-						[DASHBOARD]
+						Dashboard
 					</a>
 					<a
 						href="/admin/drafts"
@@ -94,7 +94,7 @@
 							? 'bg-[#22D3EE]/5 text-[#22D3EE]'
 							: 'text-slate-400 hover:text-white'}"
 					>
-						[DRAFTS]
+						Drafts
 					</a>
 					<a
 						href="/admin/published"
@@ -102,7 +102,7 @@
 							? 'bg-[#22D3EE]/5 text-[#22D3EE]'
 							: 'text-slate-400 hover:text-white'}"
 					>
-						[PUBLISHED]
+						Published
 					</a>
 					<a
 						href="/admin/rejected"
@@ -110,7 +110,7 @@
 							? 'bg-[#22D3EE]/5 text-[#22D3EE]'
 							: 'text-slate-400 hover:text-white'}"
 					>
-						[REJECTED]
+						Rejected
 					</a>
 				</nav>
 
@@ -126,7 +126,7 @@
 						onclick={handleLogout}
 						class="cursor-pointer rounded border border-[#E11D48]/30 bg-[#E11D48]/5 px-2.5 py-1 font-mono text-xs text-[#E11D48] transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white"
 					>
-						[EXIT_SYS]
+						Logout
 					</button>
 				</div>
 			</div>
