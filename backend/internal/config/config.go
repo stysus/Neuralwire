@@ -15,6 +15,11 @@ type Config struct {
 	// "production". Production refuses to boot with default credentials or a
 	// development-only token secret.
 	AppEnv string
+	// TrustProxy enables trusting X-Forwarded-For for client IP resolution.
+	// Only enable when the server is behind a trusted reverse proxy
+	// (Nginx/Caddy/cloud LB); otherwise clients can spoof the header and
+	// bypass per-IP rate limits.
+	TrustProxy bool
 	// Port is the HTTP listen port (default "8080").
 	Port string
 	// DatabasePath is the SQLite database file path.
@@ -67,6 +72,9 @@ type Config struct {
 	// TrendingCacheTTLSeconds caches trending results for this many seconds
 	// (default 300 = 5m). <=0 disables trending caching.
 	TrendingCacheTTLSeconds int
+	// LoginRateLimit is the max login attempts per IP per minute
+	// (default 5). <=0 disables login rate limiting.
+	LoginRateLimit int
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -114,11 +122,17 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	loginRateLimit, err := getenvInt("LOGIN_RATE_LIMIT", 5)
+	if err != nil {
+		return Config{}, err
+	}
 
 	imgGenEnabled := parseOptionalBool(os.Getenv("AI_IMAGE_GENERATION_ENABLED"))
+	trustProxy := parseOptionalBool(os.Getenv("TRUST_PROXY"))
 
 	return Config{
 		AppEnv:                   strings.ToLower(strings.TrimSpace(getenv("APP_ENV", "development"))),
+		TrustProxy:               trustProxy != nil && *trustProxy,
 		Port:                     getenv("PORT", "8080"),
 		DatabasePath:             getenv("DB_PATH", "data/neuralwire.db"),
 		UserAgent:                getenv("USER_AGENT", "Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)"),
@@ -139,6 +153,7 @@ func Load() (Config, error) {
 		ScrapeDelayMax:           time.Duration(scrapeDelayMaxSec) * time.Second,
 		ViewRateLimit:            viewRateLimit,
 		TrendingCacheTTLSeconds:  trendingCacheTTL,
+		LoginRateLimit:           loginRateLimit,
 	}, nil
 }
 

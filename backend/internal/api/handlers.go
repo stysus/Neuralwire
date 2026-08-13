@@ -167,7 +167,7 @@ func (s *Server) handleRecordView(w http.ResponseWriter, r *http.Request) {
 	// Per-IP anti-abuse: the same visitor can only record a limited number of
 	// views per window. When limited, return 429 with Retry-After.
 	if s.viewLimiter != nil {
-		ok, retryAfter := s.viewLimiter.Allow(clientIP(r))
+		ok, retryAfter := s.viewLimiter.Allow(s.clientIP(r))
 		if !ok {
 			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
 			s.writeError(w, http.StatusTooManyRequests, "rate limit exceeded for view tracking")
@@ -247,8 +247,20 @@ type loginResponse struct {
 }
 
 // handleLogin authenticates admin credentials and returns a signed bearer
-// token. It is the only public route under /api/admin/.
+// token. It is the only public route under /api/admin/. Per-IP rate limiting
+// slows brute-force attempts.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	// Rate limit by IP before doing any work, so brute-force attempts are
+	// throttled even when they never send a valid body.
+	if s.loginLimiter != nil {
+		ok, retryAfter := s.loginLimiter.Allow(s.clientIP(r))
+		if !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+			s.writeError(w, http.StatusTooManyRequests, "too many login attempts, try again later")
+			return
+		}
+	}
+
 	var req loginRequest
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid JSON body")

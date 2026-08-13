@@ -11,12 +11,12 @@ func clearEnv(t *testing.T) {
 	for _, key := range []string{
 		"PORT", "DB_PATH", "USER_AGENT", "CORS_ALLOW_ORIGIN", "AI_SUMMARY_API_KEY",
 		"AI_SUMMARY_MODEL", "AI_SUMMARY_BASE_URL", "AI_SUMMARY_PROVIDER",
-		"AI_IMAGE_GENERATION_ENABLED", "APP_ENV",
+		"AI_IMAGE_GENERATION_ENABLED", "APP_ENV", "TRUST_PROXY",
 		"ADMIN_USERNAME", "ADMIN_PASSWORD",
 		"ADMIN_TOKEN_SECRET", "SCRAPE_MAX_PER_SOURCE", "SCRAPE_MAX_INSERT_PER_SOURCE",
 		"SCRAPE_TIMEOUT_SECONDS",
 		"SCRAPE_MIN_CONTENT_CHARS", "SCRAPE_DELAY_MIN_SECONDS", "SCRAPE_DELAY_MAX_SECONDS",
-		"VIEW_RATE_LIMIT", "TRENDING_CACHE_TTL_SECONDS",
+		"VIEW_RATE_LIMIT", "TRENDING_CACHE_TTL_SECONDS", "LOGIN_RATE_LIMIT",
 	} {
 		t.Setenv(key, "")
 	}
@@ -100,6 +100,9 @@ func TestLoadRespectsExplicitEnv(t *testing.T) {
 	if cfg.TrendingCacheTTLSeconds != 300 {
 		t.Errorf("TrendingCacheTTLSeconds = %d, want default 300", cfg.TrendingCacheTTLSeconds)
 	}
+	if cfg.LoginRateLimit != 5 {
+		t.Errorf("LoginRateLimit = %d, want default 5", cfg.LoginRateLimit)
+	}
 }
 
 func TestLoadRejectsBadEnv(t *testing.T) {
@@ -166,6 +169,9 @@ func TestLoadAppEnv(t *testing.T) {
 	if cfg.AppEnv != "development" {
 		t.Errorf("AppEnv = %q, want default development", cfg.AppEnv)
 	}
+	if cfg.TrustProxy {
+		t.Error("TrustProxy = true, want default false")
+	}
 
 	clearEnv(t)
 	t.Setenv("APP_ENV", "Production")
@@ -175,5 +181,15 @@ func TestLoadAppEnv(t *testing.T) {
 	}
 	if cfg.AppEnv != "production" {
 		t.Errorf("AppEnv = %q, want normalized production", cfg.AppEnv)
+	}
+
+	clearEnv(t)
+	t.Setenv("TRUST_PROXY", "true")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.TrustProxy {
+		t.Error("TrustProxy = false, want true when TRUST_PROXY=true")
 	}
 }

@@ -36,6 +36,9 @@ English by default).
   `GET /api/news/trending?window=day|week|all&limit=N` returns the most-read
   published articles with view counts
 - CORS enabled for `http://localhost:5173` and `http://127.0.0.1:5173` (SvelteKit dev server)
+- **Security headers** on every response: `X-Content-Type-Options: nosniff`,
+  `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`, and a
+  permissive-for-images `Content-Security-Policy` (anti-XSS/clickjacking)
 - Admin API protected by simple bearer-token auth (`POST /api/admin/login`)
 
 ## Requirements
@@ -62,6 +65,7 @@ cycle with `POST /api/admin/fetch` (see below).
 | -------------------- | ----------------------------- | ---------------------------------------------------- |
 | `PORT`               | `8080`                        | HTTP listen port                                     |
 | `APP_ENV`            | `development`                 | Runtime environment. In `production`, startup refuses default admin credentials or the dev token secret |
+| `TRUST_PROXY`        | `false`                       | Trust `X-Forwarded-For` for client IP (enable only behind a trusted reverse proxy; otherwise spoofable) |
 | `DB_PATH`            | `data/neuralwire.db`          | SQLite database file path                            |
 | `USER_AGENT`         | `Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)` | User-Agent for outbound RSS/scrape requests; set a real bot UA + domain before going public |
 | `CORS_ALLOW_ORIGIN`  | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated allowed frontend origins |
@@ -77,6 +81,7 @@ cycle with `POST /api/admin/fetch` (see below).
 | `SCRAPE_MIN_CONTENT_CHARS` | `500`                    | Minimum content length for a fetched draft; shorter articles are skipped as low quality |
 | `VIEW_RATE_LIMIT` | `30`                     | Per-IP rate limit (per minute) for `POST /api/news/{id}/view`; `<=0` disables |
 | `TRENDING_CACHE_TTL_SECONDS` | `300`               | Cache TTL (seconds) for trending results; `<=0` disables |
+| `LOGIN_RATE_LIMIT` | `5`                       | Per-IP login attempts per minute (anti brute force); `<=0` disables |
 | `ADMIN_USERNAME`     | `admin`                       | Admin login username                                 |
 | `ADMIN_PASSWORD`     | `admin123`                    | Admin login password. **Change it outside development** |
 | `ADMIN_TOKEN_SECRET` | dev value (see `.env.example`) | HMAC secret signing admin bearer tokens. **Change it outside development** |

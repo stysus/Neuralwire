@@ -978,3 +978,112 @@ func TestSearchMultiWordAnd(t *testing.T) {
 		t.Errorf("absent-token total = %d, want 0", resp.Pagination.Total)
 	}
 }
+
+func TestClientIPTrustProxy(t *testing.T) {
+	s := newTestServer(t) // trustProxy = false default
+
+	req := httptest.NewRequest(http.MethodGet, "/api/news", nil)
+	req.RemoteAddr = "203.0.113.9:12345"
+	req.Header.Set("X-Forwarded-For", "1.2.3.4")
+	if got := s.clientIP(req); got != "203.0.113.9" {
+		t.Errorf("clientIP without trustProxy = %q, want RemoteAddr (XFF ignored)", got)
+	}
+
+	// With trustProxy enabled, XFF is used.
+	s.trustProxy = true
+	if got := s.clientIP(req); got != "1.2.3.4" {
+		t.Errorf("clientIP with trustProxy = %q, want XFF", got)
+	}
+
+	// XFF with multiple hops -> first entry.
+	req.Header.Set("X-Forwarded-For", "1.2.3.4, 5.6.7.8")
+	if got := s.clientIP(req); got != "1.2.3.4" {
+		t.Errorf("clientIP multi-hop = %q, want first XFF entry", got)
+	}
+}
+
+func TestSecurityHeaders(t *testing.T) {
+	s := newTestServer(t)
+	rec := doJSON(t, s, http.MethodGet, "/api/health", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("health status = %d", rec.Code)
+	}
+	h := rec.Header()
+	checks := []struct {
+		key   string
+		value string
+	}{
+		{"X-Content-Type-Options", "nosniff"},
+		{"X-Frame-Options", "DENY"},
+		{"Referrer-Policy", "strict-origin-when-cross-origin"},
+		{"Permissions-Policy", "camera=(), microphone=(), geolocation=()"},
+	}
+	for _, c := range checks {
+		if got := h.Get(c.key); got != c.value {
+			t.Errorf("%s = %q, want %q", c.key, got, c.value)
+		}
+	}
+	if got := h.Get("Content-Security-Policy"); got == "" {
+		t.Error("Content-Security-Policy header missing")
+	}
+}
+
+func TestLoginRateLimit(t *testing.T) {
+	db, err := database.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := database.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	s := NewServer(ServerOptions{
+		NewsRepo:       repository.NewNewsRepository(db),
+		CategoryRepo:   repository.NewCategoryRepository(db),
+		SettingsRepo:   repository.NewSettingsRepository(db),
+		LoginRateLimit: 2, // allow 2 attempts per IP
+		Auth:           auth.NewManager("test-secret", 0),
+		AdminUser:      testAdminUser,
+		AdminPass:      testAdminPass,
+		Logger:         log.New(io.Discard, "", 0),
+	})
+
+	h := s.Handler()
+	doLogin := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/api/admin/login",
+			bytes.NewReader([]byte(`{"username":"admin","password":"wrong"}`)))
+		req.RemoteAddr = "198.51.100.7:12345"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := doLogin(); code != http.StatusUnauthorized {
+		t.Fatalf("attempt 1 = %d, want 401", code)
+	}
+	if code := doLogin(); code != http.StatusUnauthorized {
+		t.Fatalf("attempt 2 = %d, want 401", code)
+	}
+	if code := doLogin(); code != http.StatusTooManyRequests {
+		t.Errorf("attempt 3 = %d, want 429 (rate limited)", code)
+	}
+}
+
+func TestValidCredentials(t *testing.T) {
+	s := newTestServer(t) // admin/admin123 dari test helper
+
+	cases := []struct {
+		user, pass string
+		want       bool
+	}{
+		{testAdminUser, testAdminPass, true},
+		{testAdminUser, "wrong", false},
+		{"wrong", testAdminPass, false},
+		{"wrong", "wrong", false},
+		{"", "", false},
+	}
+	for _, c := range cases {
+		if got := s.validCredentials(c.user, c.pass); got != c.want {
+			t.Errorf("validCredentials(%q, %q) = %v, want %v", c.user, c.pass, got, c.want)
+		}
+	}
+}

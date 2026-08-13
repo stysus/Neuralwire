@@ -121,6 +121,8 @@ func main() {
 		SettingsRepo:     settingsRepo,
 		ViewRateLimit:    cfg.ViewRateLimit,
 		TrendingCacheTTL: time.Duration(cfg.TrendingCacheTTLSeconds) * time.Second,
+		TrustProxy:       cfg.TrustProxy,
+		LoginRateLimit:   cfg.LoginRateLimit,
 		AllowOrigins:     cfg.CORSAllowOrigins,
 		Auth:             authManager,
 		AdminUser:        cfg.AdminUsername,

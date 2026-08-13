@@ -42,6 +42,11 @@ type Server struct {
 	// viewLimiter is a per-IP rate limit for POST /api/news/{id}/view to
 	// prevent view-count abuse. Nil disables limiting.
 	viewLimiter *ratelimit.Limiter
+	// loginLimiter is a per-IP rate limit for POST /api/admin/login to slow
+	// brute-force password attempts. Nil disables limiting.
+	loginLimiter *ratelimit.Limiter
+	// trustProxy enables trusting X-Forwarded-For for client IP resolution.
+	trustProxy bool
 	// trendingCache memoizes trending results per window for a few minutes so
 	// the heavy GROUP BY query is not re-run on every request. Nil disables.
 	trendingCache *cache.Cache
@@ -66,7 +71,14 @@ type ServerOptions struct {
 	// TrendingCacheTTL caches trending results for this duration (default 5m
 	// when >0). <=0 disables trending caching.
 	TrendingCacheTTL time.Duration
-	Logger           *log.Logger
+	// TrustProxy enables trusting X-Forwarded-For for client IP resolution.
+	// Enable only behind a trusted reverse proxy.
+	TrustProxy bool
+	// LoginRateLimit is the max login attempts per IP per window
+	// (default 5 per minute when >0). <=0 disables login limiting.
+	LoginRateLimit  int
+	LoginRateWindow time.Duration
+	Logger          *log.Logger
 }
 
 // NewServer builds a Server.
@@ -93,10 +105,18 @@ func NewServer(opts ServerOptions) *Server {
 		adminPass:    opts.AdminPass,
 		fetcher:      opts.Fetcher,
 		logger:       opts.Logger,
+		trustProxy:   opts.TrustProxy,
 	}
 	if opts.ViewRateLimit > 0 {
 		srv.viewLimiter = ratelimit.New(opts.ViewRateLimit, opts.ViewRateWindow)
 		srv.viewLimiter.Start()
+	}
+	if opts.LoginRateLimit > 0 {
+		if opts.LoginRateWindow <= 0 {
+			opts.LoginRateWindow = time.Minute
+		}
+		srv.loginLimiter = ratelimit.New(opts.LoginRateLimit, opts.LoginRateWindow)
+		srv.loginLimiter.Start()
 	}
 	if opts.TrendingCacheTTL > 0 {
 		srv.trendingCache = cache.New(opts.TrendingCacheTTL)
@@ -137,7 +157,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/admin/settings", s.requireAuth(http.HandlerFunc(s.handleUpdateSettings)))
 	mux.Handle("/api/admin/", s.requireAuth(admin))
 
-	return s.recover(s.log(s.cors(mux)))
+	return s.recover(s.securityHeaders(s.log(s.cors(mux))))
 }
 
 // --- response helpers -----------------------------------------------------

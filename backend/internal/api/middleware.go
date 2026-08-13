@@ -50,17 +50,20 @@ func bearerToken(r *http.Request) (string, bool) {
 	return token, true
 }
 
-// clientIP extracts the client's IP from the request, honoring X-Forwarded-For
-// first (for reverse proxies) and falling back to RemoteAddr. Ports are
-// stripped.
-func clientIP(r *http.Request) string {
-	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
-		if i := strings.IndexByte(xff, ','); i >= 0 {
-			xff = xff[:i]
-		}
-		xff = strings.TrimSpace(xff)
-		if xff != "" {
-			return xff
+// clientIP extracts the client's IP from the request. X-Forwarded-For is only
+// trusted when the server sits behind a trusted reverse proxy (TrustProxy);
+// otherwise attackers could spoof the header and bypass per-IP rate limits.
+// Ports are stripped.
+func (s *Server) clientIP(r *http.Request) string {
+	if s.trustProxy {
+		if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+			if i := strings.IndexByte(xff, ','); i >= 0 {
+				xff = xff[:i]
+			}
+			xff = strings.TrimSpace(xff)
+			if xff != "" {
+				return xff
+			}
 		}
 	}
 	host := r.RemoteAddr
@@ -122,6 +125,31 @@ func (s *Server) recover(next http.Handler) http.Handler {
 				s.writeError(w, http.StatusInternalServerError, "internal server error")
 			}
 		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// securityHeaders adds hardening headers to every response:
+//   - X-Content-Type-Options: nosniff — prevents MIME sniffing
+//   - X-Frame-Options: DENY — prevents clickjacking
+//   - Referrer-Policy: strict-origin-when-cross-origin — limits referrer leaks
+//   - Permissions-Policy — disables unused browser features
+//   - Content-Security-Policy — restricts script/image sources (anti-XSS)
+//
+// Note: CSP is intentionally permissive for images (img-src * data:) because
+// cover images come from many third-party CDNs. Admin-created content is
+// rendered via {@html}; CSP default-src 'self' still blocks inline scripts.
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		h.Set("Content-Security-Policy",
+			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data: https: http:; font-src 'self' data:; "+
+				"connect-src 'self' http://localhost:8080; frame-ancestors 'none'; base-uri 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
