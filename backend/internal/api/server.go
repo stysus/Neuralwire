@@ -53,6 +53,8 @@ type Server struct {
 	// trendingCache memoizes trending results per window for a few minutes so
 	// the heavy GROUP BY query is not re-run on every request. Nil disables.
 	trendingCache *cache.Cache
+	// disableCompression turns off gzip/brotli response compression.
+	disableCompression bool
 }
 
 // ServerOptions configures the API server.
@@ -85,7 +87,9 @@ type ServerOptions struct {
 	// request (default 120 per minute when >0). <=0 disables global limiting.
 	GlobalRateLimit  int
 	GlobalRateWindow time.Duration
-	Logger           *log.Logger
+	// DisableCompression turns off gzip/brotli response compression.
+	DisableCompression bool
+	Logger             *log.Logger
 }
 
 // NewServer builds a Server.
@@ -103,16 +107,17 @@ func NewServer(opts ServerOptions) *Server {
 		opts.ViewRateWindow = time.Minute
 	}
 	srv := &Server{
-		newsRepo:     opts.NewsRepo,
-		categoryRepo: opts.CategoryRepo,
-		settingsRepo: opts.SettingsRepo,
-		allowOrigins: opts.AllowOrigins,
-		auth:         opts.Auth,
-		adminUser:    opts.AdminUser,
-		adminPass:    opts.AdminPass,
-		fetcher:      opts.Fetcher,
-		logger:       opts.Logger,
-		trustProxy:   opts.TrustProxy,
+		newsRepo:           opts.NewsRepo,
+		categoryRepo:       opts.CategoryRepo,
+		settingsRepo:       opts.SettingsRepo,
+		allowOrigins:       opts.AllowOrigins,
+		auth:               opts.Auth,
+		adminUser:          opts.AdminUser,
+		adminPass:          opts.AdminPass,
+		fetcher:            opts.Fetcher,
+		logger:             opts.Logger,
+		trustProxy:         opts.TrustProxy,
+		disableCompression: opts.DisableCompression,
 	}
 	if opts.ViewRateLimit > 0 {
 		srv.viewLimiter = ratelimit.New(opts.ViewRateLimit, opts.ViewRateWindow)
@@ -171,7 +176,13 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/admin/settings", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUpdateSettings))))
 	mux.Handle("/api/admin/", s.requireAuth(s.csrfProtect(admin)))
 
-	return s.recover(s.rateLimit(s.securityHeaders(s.log(s.cors(mux)))))
+	// Middleware order: recover -> rateLimit -> securityHeaders -> log -> cors
+	// -> cacheControl -> etag -> compress. ETag runs outside compression so the
+	// hash covers the compressed bytes the client actually received; cache
+	// headers are set last so conditional revalidation can serve 304s.
+	return s.recover(s.rateLimit(s.securityHeaders(s.log(s.cors(
+		s.cacheControl(s.etag(s.compress(mux))),
+	)))))
 }
 
 // --- response helpers -----------------------------------------------------

@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	codeberg.org/readeck/go-readability/v2 v2.1.2
 	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/andybalholm/brotli v1.2.2
 	github.com/mmcdole/gofeed v1.4.1
 	golang.org/x/net v0.57.0
 	modernc.org/sqlite v1.56.0

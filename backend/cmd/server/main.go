@@ -116,20 +116,21 @@ func main() {
 	})
 
 	srv := api.NewServer(api.ServerOptions{
-		NewsRepo:         newsRepo,
-		CategoryRepo:     categoryRepo,
-		SettingsRepo:     settingsRepo,
-		ViewRateLimit:    cfg.ViewRateLimit,
-		TrendingCacheTTL: time.Duration(cfg.TrendingCacheTTLSeconds) * time.Second,
-		TrustProxy:       cfg.TrustProxy,
-		LoginRateLimit:   cfg.LoginRateLimit,
-		GlobalRateLimit:  cfg.GlobalRateLimit,
-		AllowOrigins:     cfg.CORSAllowOrigins,
-		Auth:             authManager,
-		AdminUser:        cfg.AdminUsername,
-		AdminPass:        cfg.AdminPassword,
-		Fetcher:          rssFetcher,
-		Logger:           logger,
+		NewsRepo:           newsRepo,
+		CategoryRepo:       categoryRepo,
+		SettingsRepo:       settingsRepo,
+		ViewRateLimit:      cfg.ViewRateLimit,
+		TrendingCacheTTL:   time.Duration(cfg.TrendingCacheTTLSeconds) * time.Second,
+		TrustProxy:         cfg.TrustProxy,
+		LoginRateLimit:     cfg.LoginRateLimit,
+		GlobalRateLimit:    cfg.GlobalRateLimit,
+		DisableCompression: !cfg.HTTPCompressionEnabled,
+		AllowOrigins:       cfg.CORSAllowOrigins,
+		Auth:               authManager,
+		AdminUser:          cfg.AdminUsername,
+		AdminPass:          cfg.AdminPassword,
+		Fetcher:            rssFetcher,
+		Logger:             logger,
 	})
 
 	httpServer := &http.Server{

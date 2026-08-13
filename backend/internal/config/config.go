@@ -78,6 +78,9 @@ type Config struct {
 	// GlobalRateLimit is the max requests per IP per minute applied to every
 	// request (default 120). <=0 disables global rate limiting.
 	GlobalRateLimit int
+	// HTTPCompressionEnabled enables gzip/brotli response compression
+	// (default true). Set to false to disable compression entirely.
+	HTTPCompressionEnabled bool
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -136,6 +139,7 @@ func Load() (Config, error) {
 
 	imgGenEnabled := parseOptionalBool(os.Getenv("AI_IMAGE_GENERATION_ENABLED"))
 	trustProxy := parseOptionalBool(os.Getenv("TRUST_PROXY"))
+	compressionEnabled := parseOptionalBool(os.Getenv("HTTP_COMPRESSION_ENABLED"))
 
 	return Config{
 		AppEnv:                   strings.ToLower(strings.TrimSpace(getenv("APP_ENV", "development"))),
@@ -162,6 +166,7 @@ func Load() (Config, error) {
 		TrendingCacheTTLSeconds:  trendingCacheTTL,
 		LoginRateLimit:           loginRateLimit,
 		GlobalRateLimit:          globalRateLimit,
+		HTTPCompressionEnabled:   compressionEnabled == nil || *compressionEnabled,
 	}, nil
 }
 
