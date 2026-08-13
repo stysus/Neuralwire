@@ -300,10 +300,6 @@
 			class="mx-auto mt-12 flex max-w-7xl flex-col items-center justify-between border-t border-[rgba(255,255,255,0.05)] px-4 pt-8 font-mono text-xs text-slate-500 sm:flex-row sm:px-6 lg:px-8"
 		>
 			<p>© 2026 NEURALWIRE MEDIA. ALL RIGHTS RESERVED.</p>
-			<div class="mt-4 flex space-x-6 sm:mt-0">
-				<span class="cursor-pointer hover:text-slate-300">SYS_STATUS: ACTIVE</span>
-				<span class="font-bold text-[#22D3EE]/70">LATENCY: 1.2MS</span>
-			</div>
 		</div>
 	</footer>
 </div>

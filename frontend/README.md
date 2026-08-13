@@ -64,6 +64,7 @@ You can preview the production build with `npm run preview`.
 - Added a "Load More" button to the homepage news grid (`frontend/src/routes/+page.svelte`) that displays up to 15 items initially, appends 15 more items reactively per click, and resets when switching categories.
 - Implemented inline "Hide Feed" buttons and a fixed floating "Collapse Feed" FAB on the homepage (`frontend/src/routes/+page.svelte`) that resets the visible count to 15 and smoothly scrolls back to the top of the news grid.
 - Refactored the About page (`frontend/src/routes/about/+page.svelte`) to remove the system architecture section, clean up headers/labels, and format texts professionally.
+- Removed the `SYS_STATUS: ACTIVE` and `LATENCY: 1.2MS` debug metrics container from the global layout footer (`frontend/src/routes/+layout.svelte`).
 - Verified with `npm run check` (0 errors) and formatted with Prettier.
 
 ### 2026-08-13 — Trending / most-read articles (by Codex agent)
