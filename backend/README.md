@@ -61,6 +61,7 @@ cycle with `POST /api/admin/fetch` (see below).
 | Variable             | Default                       | Description                                          |
 | -------------------- | ----------------------------- | ---------------------------------------------------- |
 | `PORT`               | `8080`                        | HTTP listen port                                     |
+| `APP_ENV`            | `development`                 | Runtime environment. In `production`, startup refuses default admin credentials or the dev token secret |
 | `DB_PATH`            | `data/neuralwire.db`          | SQLite database file path                            |
 | `USER_AGENT`         | `Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)` | User-Agent for outbound RSS/scrape requests; set a real bot UA + domain before going public |
 | `CORS_ALLOW_ORIGIN`  | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated allowed frontend origins |
@@ -74,6 +75,8 @@ cycle with `POST /api/admin/fetch` (see below).
 | `SCRAPE_DELAY_MIN_SECONDS` | `1`                     | Lower bound of the random politeness delay (seconds) between external requests |
 | `SCRAPE_DELAY_MAX_SECONDS` | `2`                     | Upper bound of the random politeness delay (seconds) between external requests |
 | `SCRAPE_MIN_CONTENT_CHARS` | `500`                    | Minimum content length for a fetched draft; shorter articles are skipped as low quality |
+| `VIEW_RATE_LIMIT` | `30`                     | Per-IP rate limit (per minute) for `POST /api/news/{id}/view`; `<=0` disables |
+| `TRENDING_CACHE_TTL_SECONDS` | `300`               | Cache TTL (seconds) for trending results; `<=0` disables |
 | `ADMIN_USERNAME`     | `admin`                       | Admin login username                                 |
 | `ADMIN_PASSWORD`     | `admin123`                    | Admin login password. **Change it outside development** |
 | `ADMIN_TOKEN_SECRET` | dev value (see `.env.example`) | HMAC secret signing admin bearer tokens. **Change it outside development** |
@@ -176,7 +179,7 @@ envelope.
 | Method | Path                | Description                                        |
 | ------ | ------------------- | -------------------------------------------------- |
 | GET    | `/api/health`       | Liveness check                                     |
-| GET    | `/api/news`         | Published articles; `?category=`, `?page=`, `?page_size=` |
+| GET    | `/api/news`         | Published articles; `?category=`, `?q=` (title/summary keyword search, multi-word tokens matched with AND), `?page=`, `?page_size=` |
 | GET    | `/api/news/{id}`    | Single published article (404 if draft/rejected)   |
 | GET    | `/api/news/trending`| Most-read published articles; `?window=day\|week\|all` (default week), `?limit=` (default 5) |
 | POST   | `/api/news/{id}/view` | Record one read of an article; optional body `{viewer_key}` for per-visitor dedup |

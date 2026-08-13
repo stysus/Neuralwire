@@ -7,9 +7,12 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"neuralwire/backend/internal/auth"
+	"neuralwire/backend/internal/cache"
 	"neuralwire/backend/internal/fetcher"
+	"neuralwire/backend/internal/ratelimit"
 	"neuralwire/backend/internal/repository"
 )
 
@@ -36,6 +39,12 @@ type Server struct {
 	// cancel endpoint can abort a running cycle without data races.
 	fetchMu     sync.Mutex
 	fetchCancel context.CancelFunc
+	// viewLimiter is a per-IP rate limit for POST /api/news/{id}/view to
+	// prevent view-count abuse. Nil disables limiting.
+	viewLimiter *ratelimit.Limiter
+	// trendingCache memoizes trending results per window for a few minutes so
+	// the heavy GROUP BY query is not re-run on every request. Nil disables.
+	trendingCache *cache.Cache
 }
 
 // ServerOptions configures the API server.
@@ -50,7 +59,14 @@ type ServerOptions struct {
 	// Fetcher drives the manual POST /api/admin/fetch endpoint. When nil the
 	// endpoint responds 503.
 	Fetcher FeedFetcher
-	Logger  *log.Logger
+	// ViewRateLimit is the max view-count requests per IP per window
+	// (default 30 per minute when >0). <=0 disables the limiter.
+	ViewRateLimit  int
+	ViewRateWindow time.Duration
+	// TrendingCacheTTL caches trending results for this duration (default 5m
+	// when >0). <=0 disables trending caching.
+	TrendingCacheTTL time.Duration
+	Logger           *log.Logger
 }
 
 // NewServer builds a Server.
@@ -64,7 +80,10 @@ func NewServer(opts ServerOptions) *Server {
 	if opts.Logger == nil {
 		opts.Logger = log.Default()
 	}
-	return &Server{
+	if opts.ViewRateWindow <= 0 {
+		opts.ViewRateWindow = time.Minute
+	}
+	srv := &Server{
 		newsRepo:     opts.NewsRepo,
 		categoryRepo: opts.CategoryRepo,
 		settingsRepo: opts.SettingsRepo,
@@ -75,6 +94,15 @@ func NewServer(opts ServerOptions) *Server {
 		fetcher:      opts.Fetcher,
 		logger:       opts.Logger,
 	}
+	if opts.ViewRateLimit > 0 {
+		srv.viewLimiter = ratelimit.New(opts.ViewRateLimit, opts.ViewRateWindow)
+		srv.viewLimiter.Start()
+	}
+	if opts.TrendingCacheTTL > 0 {
+		srv.trendingCache = cache.New(opts.TrendingCacheTTL)
+		srv.trendingCache.Start()
+	}
+	return srv
 }
 
 // Handler assembles the route table and middleware stack. All routes under

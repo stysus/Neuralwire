@@ -14,8 +14,20 @@
 		inputQuery = data.query;
 	});
 
+	let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+	// Debounced search-as-you-type: navigates to /search?q=... ~300ms after typing stops.
+	function scheduleSearch() {
+		clearTimeout(debounceTimer);
+		const q = inputQuery.trim();
+		debounceTimer = setTimeout(() => {
+			goto(`/search?q=${encodeURIComponent(q)}`, { keepFocus: true });
+		}, 300);
+	}
+
 	function handleSubmit(e: Event) {
 		e.preventDefault();
+		clearTimeout(debounceTimer);
 		goto(`/search?q=${encodeURIComponent(inputQuery.trim())}`);
 	}
 
@@ -58,6 +70,7 @@
 				type="text"
 				placeholder="Enter search terms (e.g. Vatican, quantum, EU)..."
 				bind:value={inputQuery}
+				oninput={scheduleSearch}
 				class="w-full rounded-xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/60 px-4 py-3 pl-12 font-mono text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-[#22D3EE]/50 focus:ring-1 focus:ring-[#22D3EE]/20 focus:outline-none"
 			/>
 			<svg

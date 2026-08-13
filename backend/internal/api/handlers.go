@@ -39,6 +39,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	category := strings.TrimSpace(r.URL.Query().Get("category"))
+	query := strings.TrimSpace(r.URL.Query().Get("q"))
 
 	page, err := parsePositiveInt(r.URL.Query().Get("page"), 1)
 	if err != nil {
@@ -54,7 +55,7 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 		pageSize = maxPageSize
 	}
 
-	news, total, err := s.newsRepo.ListPublished(category, page, pageSize)
+	news, total, err := s.newsRepo.ListPublished(category, query, page, pageSize)
 	if err != nil {
 		s.logger.Printf("api: list news: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to list news")
@@ -102,7 +103,8 @@ func (s *Server) handleGetNews(w http.ResponseWriter, r *http.Request) {
 
 // handleTrendingNews returns the most-viewed published articles for the
 // requested window (?window=day|week|all, default week) and limit
-// (?limit=, default 5). Public endpoint.
+// (?limit=, default 5). Public endpoint. Results are cached briefly (TTL)
+// because the underlying query aggregates the full view log.
 func (s *Server) handleTrendingNews(w http.ResponseWriter, r *http.Request) {
 	window := repository.TrendingWindow(strings.TrimSpace(r.URL.Query().Get("window")))
 	switch window {
@@ -118,6 +120,20 @@ func (s *Server) handleTrendingNews(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	cacheKey := "trending:" + string(window) + ":" + strconv.Itoa(limit)
+	if s.trendingCache != nil {
+		if v, ok := s.trendingCache.Get(cacheKey); ok {
+			if news, isNews := v.([]models.News); isNews {
+				s.writeJSON(w, http.StatusOK, map[string]any{
+					"window": window,
+					"data":   news,
+					"cached": true,
+				})
+				return
+			}
+		}
+	}
+
 	news, err := s.newsRepo.ListTrending(window, limit)
 	if err != nil {
 		s.logger.Printf("api: trending news: %v", err)
@@ -127,9 +143,13 @@ func (s *Server) handleTrendingNews(w http.ResponseWriter, r *http.Request) {
 	if news == nil {
 		news = []models.News{}
 	}
+	if s.trendingCache != nil {
+		s.trendingCache.Set(cacheKey, news)
+	}
 	s.writeJSON(w, http.StatusOK, map[string]any{
 		"window": window,
 		"data":   news,
+		"cached": false,
 	})
 }
 
@@ -142,6 +162,17 @@ func (s *Server) handleRecordView(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid news id")
 		return
+	}
+
+	// Per-IP anti-abuse: the same visitor can only record a limited number of
+	// views per window. When limited, return 429 with Retry-After.
+	if s.viewLimiter != nil {
+		ok, retryAfter := s.viewLimiter.Allow(clientIP(r))
+		if !ok {
+			w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())))
+			s.writeError(w, http.StatusTooManyRequests, "rate limit exceeded for view tracking")
+			return
+		}
 	}
 
 	var body struct {

@@ -11,6 +11,10 @@ import (
 
 // Config holds all runtime configuration for the backend.
 type Config struct {
+	// AppEnv is the runtime environment: "development" (default) or
+	// "production". Production refuses to boot with default credentials or a
+	// development-only token secret.
+	AppEnv string
 	// Port is the HTTP listen port (default "8080").
 	Port string
 	// DatabasePath is the SQLite database file path.
@@ -29,6 +33,11 @@ type Config struct {
 	AISummaryBaseURL string
 	// AISummaryProvider is a named preset that sets BaseURL/Model defaults.
 	AISummaryProvider string
+	// AIImageGenerationEnabled enables AI cover-image generation (DALL-E style)
+	// when true, disables it when false, and auto-detects from the provider /
+	// base URL when unset. Providers that cannot generate images (DeepSeek,
+	// Ollama, Gemini, Groq, OpenRouter) skip generation and use stock fallback.
+	AIImageGenerationEnabled *bool
 	// AdminUsername is the login for POST /api/admin/login.
 	AdminUsername string
 	// AdminPassword is the login password. Change it outside development.
@@ -52,6 +61,12 @@ type Config struct {
 	// ScrapeDelayMax is the upper bound of the politeness delay applied
 	// before every external request during a fetch cycle.
 	ScrapeDelayMax time.Duration
+	// ViewRateLimit is the max view-count requests per IP per minute
+	// (default 30). <=0 disables the per-IP view limiter.
+	ViewRateLimit int
+	// TrendingCacheTTLSeconds caches trending results for this many seconds
+	// (default 300 = 5m). <=0 disables trending caching.
+	TrendingCacheTTLSeconds int
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -91,8 +106,19 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	viewRateLimit, err := getenvInt("VIEW_RATE_LIMIT", 30)
+	if err != nil {
+		return Config{}, err
+	}
+	trendingCacheTTL, err := getenvInt("TRENDING_CACHE_TTL_SECONDS", 300)
+	if err != nil {
+		return Config{}, err
+	}
+
+	imgGenEnabled := parseOptionalBool(os.Getenv("AI_IMAGE_GENERATION_ENABLED"))
 
 	return Config{
+		AppEnv:                   strings.ToLower(strings.TrimSpace(getenv("APP_ENV", "development"))),
 		Port:                     getenv("PORT", "8080"),
 		DatabasePath:             getenv("DB_PATH", "data/neuralwire.db"),
 		UserAgent:                getenv("USER_AGENT", "Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)"),
@@ -101,6 +127,7 @@ func Load() (Config, error) {
 		AISummaryModel:           model,
 		AISummaryBaseURL:         baseURL,
 		AISummaryProvider:        getenv("AI_SUMMARY_PROVIDER", ""),
+		AIImageGenerationEnabled: imgGenEnabled,
 		AdminUsername:            getenv("ADMIN_USERNAME", "admin"),
 		AdminPassword:            getenv("ADMIN_PASSWORD", "admin123"),
 		AdminTokenSecret:         getenv("ADMIN_TOKEN_SECRET", "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"),
@@ -110,6 +137,8 @@ func Load() (Config, error) {
 		ScrapeMinContentChars:    scrapeMinContent,
 		ScrapeDelayMin:           time.Duration(scrapeDelayMinSec) * time.Second,
 		ScrapeDelayMax:           time.Duration(scrapeDelayMaxSec) * time.Second,
+		ViewRateLimit:            viewRateLimit,
+		TrendingCacheTTLSeconds:  trendingCacheTTL,
 	}, nil
 }
 
@@ -203,6 +232,49 @@ func getenvList(key string, fallback []string) []string {
 		return fallback
 	}
 	return out
+}
+
+// parseOptionalBool parses a boolean env value ("1","true","yes","on" => true,
+// "0","false","no","off" => false). Empty or invalid returns nil (auto-detect).
+func parseOptionalBool(v string) *bool {
+	v = strings.ToLower(strings.TrimSpace(v))
+	if v == "" {
+		return nil
+	}
+	switch v {
+	case "1", "true", "yes", "on":
+		b := true
+		return &b
+	case "0", "false", "no", "off":
+		b := false
+		return &b
+	default:
+		return nil
+	}
+}
+
+// SupportsImageGeneration reports whether the configured AI provider/endpoint
+// can generate images (DALL-E style /images/generations). Known text-only
+// providers (DeepSeek, Ollama, Gemini, Groq, OpenRouter) and localhost return
+// false so image generation is skipped instead of spamming 404s.
+func SupportsImageGeneration(provider, baseURL string) bool {
+	provider = strings.ToLower(strings.TrimSpace(provider))
+	baseURL = strings.ToLower(strings.TrimSpace(baseURL))
+
+	if strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1") {
+		return false
+	}
+	// Text-only providers that expose chat completions but no images endpoint.
+	for _, textOnly := range []string{
+		"deepseek", "ollama", "gemini", "groq", "openrouter",
+	} {
+		if strings.Contains(provider, textOnly) || strings.Contains(baseURL, textOnly) {
+			return false
+		}
+	}
+	// OpenAI (or any OpenAI-compatible host advertising images) is assumed to
+	// support generation unless explicitly disabled via the env flag.
+	return provider == "" || strings.Contains(provider, "openai") || strings.Contains(baseURL, "openai")
 }
 
 // loadDotEnv reads a simple KEY=VALUE dot-env file and exports the variables

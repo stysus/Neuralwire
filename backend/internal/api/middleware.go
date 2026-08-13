@@ -50,6 +50,26 @@ func bearerToken(r *http.Request) (string, bool) {
 	return token, true
 }
 
+// clientIP extracts the client's IP from the request, honoring X-Forwarded-For
+// first (for reverse proxies) and falling back to RemoteAddr. Ports are
+// stripped.
+func clientIP(r *http.Request) string {
+	if xff := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); xff != "" {
+		if i := strings.IndexByte(xff, ','); i >= 0 {
+			xff = xff[:i]
+		}
+		xff = strings.TrimSpace(xff)
+		if xff != "" {
+			return xff
+		}
+	}
+	host := r.RemoteAddr
+	if i := strings.LastIndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return strings.Trim(host, "[]")
+}
+
 // cors adds scoped CORS headers for the configured origins and
 // short-circuits preflight requests. The origin is echoed back only when it
 // is in the allow list, so browsers block everything else.

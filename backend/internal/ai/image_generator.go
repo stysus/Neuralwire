@@ -18,12 +18,17 @@ type ImageGenerator interface {
 type openAIImageGenerator struct {
 	apiKey        string
 	imageEndpoint string
-	client        *http.Client
-	logger        *log.Logger
+	enabled       bool
+	// unsupported is set once the upstream reports it cannot generate images
+	// (404/405/501), so later calls skip straight to the stock fallback.
+	unsupported bool
+	client      *http.Client
+	logger      *log.Logger
 }
 
-// NewImageGenerator creates an ImageGenerator client.
-func NewImageGenerator(apiKey, baseURL string, logger *log.Logger) ImageGenerator {
+// NewImageGenerator creates an ImageGenerator client. When enabled is false,
+// generation is skipped entirely and only the stock fallback is used.
+func NewImageGenerator(apiKey, baseURL string, enabled bool, logger *log.Logger) ImageGenerator {
 	if logger == nil {
 		logger = log.Default()
 	}
@@ -31,6 +36,7 @@ func NewImageGenerator(apiKey, baseURL string, logger *log.Logger) ImageGenerato
 	return &openAIImageGenerator{
 		apiKey:        apiKey,
 		imageEndpoint: endpoint,
+		enabled:       enabled,
 		client:        &http.Client{Timeout: 30 * time.Second},
 		logger:        logger,
 	}
@@ -50,6 +56,12 @@ type imageResp struct {
 }
 
 func (g *openAIImageGenerator) Generate(ctx context.Context, title, category string) string {
+	// Skip AI generation when disabled by config or after the provider
+	// reported it does not support image generation.
+	if !g.enabled || g.unsupported {
+		return GetDynamicUnsplashURL(category, title)
+	}
+
 	apiKey, baseURL, _ := resolveAIConfig(g.apiKey, "", g.imageEndpoint)
 
 	imageEndpoint := g.imageEndpoint
@@ -63,7 +75,12 @@ func (g *openAIImageGenerator) Generate(ctx context.Context, title, category str
 			"A high-quality, professional, modern minimalist technology featured cover image illustrating: %s. Dark cybernetic tech aesthetic.",
 			title,
 		)
-		if url, ok := generateImage(ctx, g.client, g.logger, imageEndpoint, apiKey, prompt); ok {
+		url, unsupported, ok := generateImage(ctx, g.client, g.logger, imageEndpoint, apiKey, prompt)
+		if unsupported {
+			g.unsupported = true
+			g.logger.Printf("ai: image generation not supported by provider; skipping future attempts")
+		}
+		if ok {
 			return url
 		}
 	}

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -138,5 +139,64 @@ func TestParseValueScoreInvalid(t *testing.T) {
 	}
 	if _, ok := parseValueScore(""); ok {
 		t.Error("expected failure for empty input")
+	}
+}
+
+func TestChatCompletionRetriesOnEmptyBody(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		var req chatRequest
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		w.Header().Set("Content-Type", "application/json")
+		if calls == 1 {
+			// First attempt: empty content (reasoning model exhausted budget).
+			w.Write([]byte(`{"choices":[{"message":{"content":""}}]}`))
+			return
+		}
+		// Second attempt: doubled max_tokens should be present.
+		if req.MaxTokens != 1000 {
+			t.Errorf("retry max_tokens = %d, want 1000 (doubled)", req.MaxTokens)
+		}
+		w.Write([]byte(`{"choices":[{"message":{"content":"recovered answer"}}]}`))
+	}))
+	defer server.Close()
+
+	s := NewSummarizer(SummarizerOptions{
+		APIKey:  "test-key",
+		Model:   "gpt-4o-mini",
+		BaseURL: server.URL,
+		Logger:  noopLogger(),
+		Timeout: 5 * time.Second,
+	})
+
+	text, ok := chatCompletion(context.Background(), s.(*openAISummarizer).client, noopLogger(),
+		server.URL+"/chat/completions", "test-key", "gpt-4o-mini", "sys", "user", 500)
+	if !ok {
+		t.Fatal("expected retry to succeed")
+	}
+	if text != "recovered answer" {
+		t.Errorf("text = %q, want recovered answer", text)
+	}
+	if calls != 2 {
+		t.Errorf("upstream calls = %d, want 2 (original + retry)", calls)
+	}
+}
+
+func TestChatCompletionNoRetryOnRealFailure(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	_, ok := chatCompletion(context.Background(), &http.Client{Timeout: 5 * time.Second}, noopLogger(),
+		server.URL+"/chat/completions", "test-key", "gpt-4o-mini", "sys", "user", 500)
+	if ok {
+		t.Error("expected failure on 500")
+	}
+	if calls != 1 {
+		t.Errorf("upstream calls = %d, want 1 (no retry on HTTP error)", calls)
 	}
 }

@@ -48,7 +48,17 @@ func main() {
 	sourceRepo := repository.NewRSSSourceRepository(db)
 	settingsRepo := repository.NewSettingsRepository(db)
 
-	if cfg.AdminUsername == "admin" && cfg.AdminPassword == "admin123" {
+	// Production hardening: refuse to boot with insecure defaults so a
+	// misconfigured deploy never goes live with admin/admin123 or a dev secret.
+	devSecret := "neuralwire-dev-secret-7f3c9a1e4b8d2f6a"
+	if cfg.AppEnv == "production" {
+		if cfg.AdminUsername == "admin" && cfg.AdminPassword == "admin123" {
+			logger.Fatalf("config: refusing to start in production with default admin credentials. Set ADMIN_USERNAME/ADMIN_PASSWORD.")
+		}
+		if cfg.AdminTokenSecret == "" || cfg.AdminTokenSecret == devSecret {
+			logger.Fatalf("config: refusing to start in production with the development ADMIN_TOKEN_SECRET. Set a strong secret.")
+		}
+	} else if cfg.AdminUsername == "admin" && cfg.AdminPassword == "admin123" {
 		logger.Printf("WARNING: using default admin credentials. Set ADMIN_USERNAME/ADMIN_PASSWORD before deployment.")
 	}
 	authManager := auth.NewManager(cfg.AdminTokenSecret, 0)
@@ -61,7 +71,20 @@ func main() {
 		Logger:  logger,
 	})
 
-	imageGenerator := ai.NewImageGenerator(cfg.AISummaryAPIKey, cfg.AISummaryBaseURL, logger)
+	// AI image generation is enabled only when the provider supports it
+	// (auto-detected from provider/base URL, overridable via
+	// AI_IMAGE_GENERATION_ENABLED). Text-only providers skip straight to the
+	// stock cover fallback instead of spamming unsupported image requests.
+	imgGenEnabled := true
+	if cfg.AIImageGenerationEnabled != nil {
+		imgGenEnabled = *cfg.AIImageGenerationEnabled
+	} else {
+		imgGenEnabled = config.SupportsImageGeneration(cfg.AISummaryProvider, cfg.AISummaryBaseURL)
+	}
+	if !imgGenEnabled {
+		logger.Printf("ai: image generation disabled (provider does not support images); using stock covers")
+	}
+	imageGenerator := ai.NewImageGenerator(cfg.AISummaryAPIKey, cfg.AISummaryBaseURL, imgGenEnabled, logger)
 
 	// Advisory news-value scoring (AI + heuristic weighted). Admins remain
 	// the final decision makers; scoring never auto-publishes.
@@ -93,15 +116,17 @@ func main() {
 	})
 
 	srv := api.NewServer(api.ServerOptions{
-		NewsRepo:     newsRepo,
-		CategoryRepo: categoryRepo,
-		SettingsRepo: settingsRepo,
-		AllowOrigins: cfg.CORSAllowOrigins,
-		Auth:         authManager,
-		AdminUser:    cfg.AdminUsername,
-		AdminPass:    cfg.AdminPassword,
-		Fetcher:      rssFetcher,
-		Logger:       logger,
+		NewsRepo:         newsRepo,
+		CategoryRepo:     categoryRepo,
+		SettingsRepo:     settingsRepo,
+		ViewRateLimit:    cfg.ViewRateLimit,
+		TrendingCacheTTL: time.Duration(cfg.TrendingCacheTTLSeconds) * time.Second,
+		AllowOrigins:     cfg.CORSAllowOrigins,
+		Auth:             authManager,
+		AdminUser:        cfg.AdminUsername,
+		AdminPass:        cfg.AdminPassword,
+		Fetcher:          rssFetcher,
+		Logger:           logger,
 	})
 
 	httpServer := &http.Server{

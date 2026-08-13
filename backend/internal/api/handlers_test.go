@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"neuralwire/backend/internal/auth"
 	"neuralwire/backend/internal/database"
@@ -797,5 +798,183 @@ func TestRelatedNewsEndpoint(t *testing.T) {
 		if i > otherIdx && strings.Contains(strings.ToLower(n.Title), "gemma") {
 			t.Errorf("gemma article ranked after unrelated one: idx=%d title=%q, otherIdx=%d", i, n.Title, otherIdx)
 		}
+	}
+}
+
+func TestSearchNewsEndpoint(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	_ = createPublishedArticle(t, s, token, "OpenAI releases Gemini killer model")
+	_ = createPublishedArticle(t, s, token, "Weather forecasting with cyclones")
+	_ = createPublishedArticle(t, s, token, "Google DeepMind robotics breakthrough")
+
+	// Search for "cyclone" should return exactly the weather article.
+	rec := doJSON(t, s, http.MethodGet, "/api/news?q=cyclone", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search status = %d, want 200", rec.Code)
+	}
+	resp := decodeList(t, rec)
+	if resp.Pagination.Total != 1 {
+		t.Fatalf("search total = %d, want 1", resp.Pagination.Total)
+	}
+	if !strings.Contains(strings.ToLower(resp.Data[0].Title), "cyclone") {
+		t.Errorf("search result = %q, want cyclone article", resp.Data[0].Title)
+	}
+
+	// Search that matches nothing returns empty list, 200.
+	rec = doJSON(t, s, http.MethodGet, "/api/news?q=zzzznomatch", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search no-match status = %d, want 200", rec.Code)
+	}
+	resp = decodeList(t, rec)
+	if resp.Pagination.Total != 0 || len(resp.Data) != 0 {
+		t.Errorf("search no-match total = %d len = %d, want 0/0", resp.Pagination.Total, len(resp.Data))
+	}
+
+	// Search combined with category filter.
+	rec = doJSON(t, s, http.MethodGet, "/api/news?q=model&category=ai", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search+category status = %d, want 200", rec.Code)
+	}
+}
+
+func TestRecordViewRateLimit(t *testing.T) {
+	db, err := database.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := database.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	s := NewServer(ServerOptions{
+		NewsRepo:      repository.NewNewsRepository(db),
+		CategoryRepo:  repository.NewCategoryRepository(db),
+		SettingsRepo:  repository.NewSettingsRepository(db),
+		ViewRateLimit: 2, // allow 2 views per IP
+		Auth:          auth.NewManager("test-secret", 0),
+		AdminUser:     testAdminUser,
+		AdminPass:     testAdminPass,
+		Logger:        log.New(io.Discard, "", 0),
+	})
+	token := adminToken(t, s)
+	a := createPublishedArticle(t, s, token, "Rate Limited Article")
+
+	// Need the server handler; call through s.Handler() with a fixed IP.
+	h := s.Handler()
+	do := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/api/news/"+strconv.FormatInt(a.ID, 10)+"/view", bytes.NewReader([]byte(`{"viewer_key":"x"}`)))
+		req.RemoteAddr = "203.0.113.9:12345"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if code := do(); code != http.StatusOK {
+		t.Fatalf("view 1 = %d, want 200", code)
+	}
+	if code := do(); code != http.StatusOK {
+		t.Fatalf("view 2 = %d, want 200", code)
+	}
+	if code := do(); code != http.StatusTooManyRequests {
+		t.Errorf("view 3 = %d, want 429 (rate limited)", code)
+	}
+}
+
+func TestTrendingCache(t *testing.T) {
+	db, err := database.Open(":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := database.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	s := NewServer(ServerOptions{
+		NewsRepo:         repository.NewNewsRepository(db),
+		CategoryRepo:     repository.NewCategoryRepository(db),
+		SettingsRepo:     repository.NewSettingsRepository(db),
+		TrendingCacheTTL: 5 * time.Minute,
+		Auth:             auth.NewManager("test-secret", 0),
+		AdminUser:        testAdminUser,
+		AdminPass:        testAdminPass,
+		Logger:           log.New(io.Discard, "", 0),
+	})
+	token := adminToken(t, s)
+	a := createPublishedArticle(t, s, token, "Trending Cache Article")
+
+	// Record a view so the article appears in trending (JOIN article_views).
+	recView := doJSON(t, s, http.MethodPost, "/api/news/"+strconv.FormatInt(a.ID, 10)+"/view", map[string]string{"viewer_key": "cache-test"})
+	if recView.Code != http.StatusOK {
+		t.Fatalf("record view status = %d", recView.Code)
+	}
+
+	// First request: not cached.
+	rec := doJSON(t, s, http.MethodGet, "/api/news/trending?window=all&limit=5", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("trending status = %d", rec.Code)
+	}
+	var first struct {
+		Data   []models.News `json:"data"`
+		Cached bool          `json:"cached"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if first.Cached {
+		t.Error("first request should not be cached")
+	}
+	if len(first.Data) == 0 {
+		t.Fatal("trending empty")
+	}
+
+	// Second request: served from cache.
+	rec = doJSON(t, s, http.MethodGet, "/api/news/trending?window=all&limit=5", nil)
+	var second struct {
+		Data   []models.News `json:"data"`
+		Cached bool          `json:"cached"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &second); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !second.Cached {
+		t.Error("second request should be cached")
+	}
+	if len(second.Data) != len(first.Data) {
+		t.Errorf("cached data len = %d, want %d", len(second.Data), len(first.Data))
+	}
+}
+
+func TestSearchMultiWordAnd(t *testing.T) {
+	s := newTestServer(t)
+	token := adminToken(t, s)
+
+	_ = createPublishedArticle(t, s, token, "Gemma 4 multimodal model for laptops")
+	_ = createPublishedArticle(t, s, token, "Gemma vision model update")
+	_ = createPublishedArticle(t, s, token, "Weather cyclone forecasting")
+	_ = createPublishedArticle(t, s, token, "OpenAI releases another model")
+
+	// Multi-word query "gemma model" must match articles containing BOTH
+	// words in title or summary (AND semantics, order-independent).
+	rec := doJSON(t, s, http.MethodGet, "/api/news?q=gemma+model&page_size=20", nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("search status = %d, want 200", rec.Code)
+	}
+	resp := decodeList(t, rec)
+	if resp.Pagination.Total != 2 {
+		t.Fatalf("multi-word total = %d, want 2 (gemma AND model)", resp.Pagination.Total)
+	}
+	for _, n := range resp.Data {
+		title := strings.ToLower(n.Title)
+		if !strings.Contains(title, "gemma") || !strings.Contains(title, "model") {
+			t.Errorf("result %q does not contain both tokens", n.Title)
+		}
+	}
+
+	// A query with an absent token returns nothing.
+	rec = doJSON(t, s, http.MethodGet, "/api/news?q=gemma+cyclone", nil)
+	resp = decodeList(t, rec)
+	if resp.Pagination.Total != 0 {
+		t.Errorf("absent-token total = %d, want 0", resp.Pagination.Total)
 	}
 }

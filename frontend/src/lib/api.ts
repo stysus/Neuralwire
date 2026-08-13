@@ -1,4 +1,4 @@
-import { mockCategories, mockNews, type Category, type News } from './mockData';
+import { mockCategories, type Category, type News } from './mockData';
 
 const BASE_URL = 'http://localhost:8080/api';
 
@@ -37,56 +37,32 @@ export async function getNews(
 	const f = getFetch(customFetch);
 	let articles: News[] = [];
 
-	try {
-		// Request a large page size to populate feeds, and add category query filter if present.
-		let url = `${BASE_URL}/news?page_size=100`;
-		if (categorySlug) {
-			url += `&category=${encodeURIComponent(categorySlug)}`;
-		}
+	// Build query string. Search uses the backend ?q= endpoint, optionally combined
+	// with a category filter; otherwise fetch a large page to populate the feeds.
+	const isSearch = searchQuery && searchQuery.trim().length > 0;
+	let url = isSearch ? `${BASE_URL}/news?q=${encodeURIComponent(searchQuery)}&page_size=20` : `${BASE_URL}/news?page_size=100`;
+	if (categorySlug) {
+		url += `&category=${encodeURIComponent(categorySlug)}`;
+	}
 
+	try {
 		const res = await f(url, { signal: AbortSignal.timeout(2000) });
 		if (res.ok) {
 			const result = await res.json();
 			articles = result && result.data ? result.data : [];
 		}
 	} catch (e) {
-		console.warn('Backend news API unreachable, using mock news.', e);
+		console.warn('Backend news API unreachable.', e);
 	}
 
-	// Fallback to mock data if backend returned 0 published articles
-	if (articles.length === 0) {
-		articles = mockNews;
-	}
-
-	// Filter by published status
-	let filtered = articles.filter((item) => item.status === 'published');
-
-	// Filter by category slug if provided (safeguard and mock fallback)
-	if (categorySlug) {
-		filtered = filtered.filter(
-			(item) =>
-				item.category.toLowerCase() === categorySlug.toLowerCase() ||
-				slugify(item.category) === categorySlug.toLowerCase()
-		);
-	}
-
-	// Filter by search query if provided (done locally as backend doesn't support query parameters for search)
-	if (searchQuery) {
-		const query = searchQuery.toLowerCase();
-		filtered = filtered.filter(
-			(item) =>
-				item.title.toLowerCase().includes(query) ||
-				item.summary.toLowerCase().includes(query) ||
-				(item.content || '').toLowerCase().includes(query)
-		);
-	}
-
-	// Sort by published_at descending
-	return filtered.sort((a, b) => {
-		const dateA = new Date(a.published_at || a.created_at).getTime();
-		const dateB = new Date(b.published_at || b.created_at).getTime();
-		return dateB - dateA;
-	});
+	// Filter by published status (backend search already filters by category/query).
+	return articles
+		.filter((item) => item.status === 'published')
+		.sort((a, b) => {
+			const dateA = new Date(a.published_at || a.created_at).getTime();
+			const dateB = new Date(b.published_at || b.created_at).getTime();
+			return dateB - dateA;
+		});
 }
 
 /**

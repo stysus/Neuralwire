@@ -52,6 +52,26 @@ You can preview the production build with `npm run preview`.
 
 ## Recent changes
 
+### 2026-08-14 — Fixed a11y label warning (STY-17)
+
+- Associated the `COVER IMAGE URL` label with its input in the admin preview
+  editor (`frontend/src/routes/admin/preview/[id]/+page.svelte`) via
+  `for`/`id`, removing the last remaining svelte-check warning.
+- `npm run check` now reports 0 errors and 0 warnings.
+
+### 2026-08-14 — Backend-powered search (STY-22)
+
+- `getNews()` in `src/lib/api.ts` now calls the backend search endpoint
+  (`GET /api/news?q=<keyword>&page_size=20`, combinable with `?category=`) when
+  a `searchQuery` is provided, instead of fetching 100 articles and filtering
+  client-side. The redundant local search filter was removed.
+- The search page (`src/routes/search/+page.svelte`) now searches as you type
+  with a ~300ms debounce (and keeps focus), so results update without a
+  request per keystroke. Form submit still works for immediate search.
+- Search results now come from the backend across all published articles, not
+  just the 100 most recent.
+- Verified with `npm run check` (0 errors).
+
 ### 2026-08-13 — Simplified category headers (by Frontend agent)
 
 - Removed the debug text `FILTER ACTIVE: INDEX_QUERY = "*"` from the category page.
@@ -86,10 +106,17 @@ You can preview the production build with `npm run preview`.
 
 ### Known open issues
 
-- 4 static images are missing and currently 404 in dev:
-  `/images/digital_ghost.jpg`, `/images/neuromancer_implants.jpg`,
-  `/images/digital_bots.jpg`, `/images/code_matrix.jpg` — decide whether to
-  restore the files or remove the references.
-- Pre-existing a11y warning (unrelated):
-  `admin/preview/[id]/+page.svelte:456` — the `COVER IMAGE URL` label is not
-  associated with its input (add `for` on the label + `id` on the input).
+- None. `npm run check` is clean (0 errors, 0 warnings).
+
+### Resolved
+
+- **Fixed a11y label warning (STY-17).** The `COVER IMAGE URL` label in
+  `admin/preview/[id]/+page.svelte` is now associated with its input via
+  `for`/`id`, removing the last remaining svelte-check warning.
+- **Removed mock fallback and dummy cover images (STY-16).** The four
+  `/images/*.jpg` 404s came from the initial template's `mockNews` data, which
+  was only used as a fallback when the backend returned no published articles.
+  `getNews()` in `src/lib/api.ts` no longer falls back to `mockNews`, and
+  `mockNews` was removed from `src/lib/mockData.ts` (only `mockCategories`
+  remains, still used as the category fallback). Empty feeds now render a real
+  empty state instead of broken images.

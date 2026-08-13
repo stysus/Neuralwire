@@ -88,13 +88,29 @@ func (r *NewsRepository) slugExists(s string) (bool, error) {
 }
 
 // ListPublished returns a page of published articles ordered by publish
-// date descending. An empty category filters across all categories.
-func (r *NewsRepository) ListPublished(category string, page, pageSize int) ([]models.News, int, error) {
+// date descending. An empty category filters across all categories. A
+// non-empty query filters by keyword match on title or summary; multi-word
+// queries are split into tokens and matched with AND semantics (each token
+// must appear in the title or summary), so "gemma model" finds articles
+// containing both words anywhere.
+func (r *NewsRepository) ListPublished(category, query string, page, pageSize int) ([]models.News, int, error) {
 	where := "WHERE status = ?"
 	args := []any{string(models.StatusPublished)}
 	if category != "" {
 		where += " AND category = ?"
 		args = append(args, category)
+	}
+	if query != "" {
+		tokens := strings.Fields(strings.ToLower(query))
+		var conds []string
+		for _, tok := range tokens {
+			like := "%" + tok + "%"
+			conds = append(conds, `(LOWER(title) LIKE ? OR LOWER(summary) LIKE ?)`)
+			args = append(args, like, like)
+		}
+		if len(conds) > 0 {
+			where += " AND (" + strings.Join(conds, " AND ") + ")"
+		}
 	}
 
 	var total int
@@ -102,11 +118,11 @@ func (r *NewsRepository) ListPublished(category string, page, pageSize int) ([]m
 		return nil, 0, fmt.Errorf("count published: %w", err)
 	}
 
-	query := `SELECT ` + newsColumns + ` FROM news ` + where +
+	querySQL := `SELECT ` + newsColumns + ` FROM news ` + where +
 		` ORDER BY published_at DESC, id DESC LIMIT ? OFFSET ?`
 	args = append(args, pageSize, (page-1)*pageSize)
 
-	rows, err := r.db.Query(query, args...)
+	rows, err := r.db.Query(querySQL, args...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("list published: %w", err)
 	}
