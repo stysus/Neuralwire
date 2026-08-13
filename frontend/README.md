@@ -52,6 +52,12 @@ You can preview the production build with `npm run preview`.
 
 ## Recent changes
 
+### 2026-08-13 — Simplified category headers (by Frontend agent)
+
+- Removed the debug text `FILTER ACTIVE: INDEX_QUERY = "*"` from the category page.
+- Removed the `// CHRONICLE_INDEX` suffix from the CATEGORY header.
+- Verified with `npm run check` (0 errors) and formatted with Prettier.
+
 ### 2026-08-13 — Trending / most-read articles (by Codex agent)
 
 - New `TrendingNews.svelte` component fetching

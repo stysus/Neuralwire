@@ -36,14 +36,11 @@
 	<!-- Category Page Header -->
 	<div class="mb-12 border-b border-[rgba(255,255,255,0.08)] pb-8">
 		<span class="tag-mono mb-2 block text-xs font-bold tracking-widest text-[#22D3EE]"
-			>CATEGORY // CHRONICLE_INDEX</span
+			>CATEGORY</span
 		>
 		<h1 class="font-serif text-3xl font-medium tracking-tight text-white uppercase md:text-4xl">
 			{category.name}
 		</h1>
-		<p class="mt-2 font-mono text-xs text-slate-400">
-			FILTER ACTIVE: INDEX_QUERY = "{category.slug.toUpperCase()}"
-		</p>
 	</div>
 
 	<!-- Articles Grid -->
