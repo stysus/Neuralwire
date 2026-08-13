@@ -531,7 +531,7 @@
 						disabled={settingsSaving}
 						class="cursor-pointer rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-4 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
 					>
-						{settingsSaving ? '[SAVING...]' : '[SAVE_THRESHOLDS]'}
+						{settingsSaving ? 'Saving...' : 'Save Thresholds'}
 					</button>
 				</div>
 			</div>
