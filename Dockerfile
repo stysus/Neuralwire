@@ -1,9 +1,21 @@
 # syntax=docker/dockerfile:1
 
 # ---------------------------------------------------------------------------
+# Build arguments. PUBLIC_SITE_URL is consumed at frontend build time (it
+# prerenders sitemap.xml / canonical / OG URLs), so it must be passed in at
+# build time: docker build --build-arg PUBLIC_SITE_URL=https://example.com .
+# Railway: set the variable in the service and pass it via build args.
+# ---------------------------------------------------------------------------
+ARG PUBLIC_SITE_URL=""
+
+# ---------------------------------------------------------------------------
 # Stage 1: build the SvelteKit frontend (adapter-static -> frontend/build)
 # ---------------------------------------------------------------------------
 FROM node:24-alpine AS frontend-builder
+
+# SvelteKit reads $env/dynamic/public at build/prerender time.
+ARG PUBLIC_SITE_URL
+ENV PUBLIC_SITE_URL=$PUBLIC_SITE_URL
 
 WORKDIR /app/frontend
 

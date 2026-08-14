@@ -12,6 +12,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Frontend build-time variable (sitemap/OG/canonical URLs).
+        PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}
     image: neuralwire:latest
     container_name: neuralwire
     restart: unless-stopped
