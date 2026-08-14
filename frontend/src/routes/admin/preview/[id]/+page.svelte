@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import type { PageData } from './$types';
 	import Image from '$lib/Image.svelte';
+	import { BASE_URL } from '$lib/api';
 
 	let { data }: { data: PageData } = $props();
 
@@ -26,7 +27,7 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${data.id}`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${data.id}`, {
 				headers: {
 					Authorization: `Bearer ${token}`,
 					Accept: 'application/json'
@@ -127,7 +128,7 @@
 		isSaving = true;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${data.id}`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${data.id}`, {
 				method: 'PUT',
 				headers: {
 					Authorization: `Bearer ${token}`,
@@ -162,7 +163,7 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${data.id}/publish`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${data.id}/publish`, {
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${token}`
@@ -185,7 +186,7 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${data.id}/reject`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${data.id}/reject`, {
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${token}`

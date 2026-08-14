@@ -35,7 +35,11 @@ function render(urls: SitemapEntry[]): string {
 	return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
 }
 
-export const prerender = false;
+// Prerendered at build time so the backend can serve it as a static file in
+// production (the SPA fallback would otherwise return index.html for it).
+// Article/category lists are best-effort: if the API is unreachable during the
+// build, the static pages are still emitted.
+export const prerender = true;
 
 export async function GET(): Promise<Response> {
 	const site = getSiteUrl();

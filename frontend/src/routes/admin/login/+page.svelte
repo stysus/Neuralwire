@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { BASE_URL } from '$lib/api';
 
 	let username = $state('');
 	let password = $state('');
@@ -12,7 +13,7 @@
 		errorMessage = '';
 
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/login', {
+			const res = await fetch(`${BASE_URL}/admin/login`, {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json'

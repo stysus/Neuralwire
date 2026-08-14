@@ -1,0 +1,15 @@
+# Build context exclusion: keep the image build fast and avoid leaking
+# secrets (e.g. .env) or large local artifacts into the build context.
+
+.git
+.agents
+skills-lock.json
+**/node_modules
+**/data
+**/*.db
+**/*.log
+**/.env
+**/.env.*
+backend/bin
+frontend/build
+frontend/.svelte-kit

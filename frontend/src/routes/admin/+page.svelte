@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import FetchProgress from '$lib/FetchProgress.svelte';
+	import { BASE_URL } from '$lib/api';
 
 	let draftsCount = $state(0);
 	let publishedCount = $state(0);
@@ -33,7 +34,7 @@
 		const token = localStorage.getItem('admin_token');
 		if (!token) return;
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/settings', {
+			const res = await fetch(`${BASE_URL}/admin/settings`, {
 				headers: { Authorization: `Bearer ${token}` }
 			});
 			if (res.ok) thresholds = await res.json();
@@ -48,7 +49,7 @@
 		settingsSaving = true;
 		settingsSaved = false;
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/settings', {
+			const res = await fetch(`${BASE_URL}/admin/settings`, {
 				method: 'PUT',
 				headers: {
 					Authorization: `Bearer ${token}`,
@@ -99,7 +100,7 @@
 		scrapeError = null;
 
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/fetch', {
+			const res = await fetch(`${BASE_URL}/admin/fetch`, {
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${token}`
@@ -158,9 +159,9 @@
 
 			// Query parallel count stats using page_size=1
 			const [resDraft, resPub, resRej] = await Promise.all([
-				fetch('http://localhost:8080/api/admin/news?status=draft&page_size=1', { headers }),
-				fetch('http://localhost:8080/api/admin/news?status=published&page_size=1', { headers }),
-				fetch('http://localhost:8080/api/admin/news?status=rejected&page_size=1', { headers })
+				fetch(`${BASE_URL}/admin/news?status=draft&page_size=1`, { headers }),
+				fetch(`${BASE_URL}/admin/news?status=published&page_size=1`, { headers }),
+				fetch(`${BASE_URL}/admin/news?status=rejected&page_size=1`, { headers })
 			]);
 
 			if (resDraft.ok && resPub.ok && resRej.ok) {

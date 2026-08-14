@@ -3,6 +3,7 @@
 	import { page as pageStore } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import Image from '$lib/Image.svelte';
+	import { BASE_URL } from '$lib/api';
 
 	let currentPage = $derived(Number($pageStore.url.searchParams.get('page')) || 1);
 	const pageSize = 10;
@@ -24,7 +25,7 @@
 
 		try {
 			const res = await fetch(
-				`http://localhost:8080/api/admin/news?status=rejected&page=${pageNumber}&page_size=${pageSize}`,
+				`${BASE_URL}/admin/news?status=rejected&page=${pageNumber}&page_size=${pageSize}`,
 				{
 					headers: {
 						Authorization: `Bearer ${token}`,
@@ -67,7 +68,7 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${id}`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${id}`, {
 				method: 'DELETE',
 				headers: {
 					Authorization: `Bearer ${token}`
@@ -106,7 +107,7 @@
 
 		isDeletingAll = true;
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/news?status=rejected', {
+			const res = await fetch(`${BASE_URL}/admin/news?status=rejected`, {
 				method: 'DELETE',
 				headers: {
 					Authorization: `Bearer ${token}`

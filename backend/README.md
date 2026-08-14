@@ -63,6 +63,11 @@ English by default).
   status, published_at)` (public category list), and
   `article_views(news_id, viewer_key, created_at)` (view dedup). Verified
   with `EXPLAIN QUERY PLAN` — hot queries use covering indexes
+- **Production readiness**: optional static serving of the built frontend
+  (`STATIC_DIR` → adapter-static `build/`, SPA fallback to `index.html`),
+  plus a multi-stage `Dockerfile` and `docker-compose.yml` that build the
+  frontend, compile the backend, and run both from one minimal non-root
+  container with a health check
 
 ## Requirements
 
@@ -91,6 +96,7 @@ cycle with `POST /api/admin/fetch` (see below).
 | `TRUST_PROXY`        | `false`                       | Trust `X-Forwarded-For` for client IP (enable only behind a trusted reverse proxy; otherwise spoofable) |
 | `DB_PATH`            | `data/neuralwire.db`          | SQLite database file path                            |
 | `USER_AGENT`         | `Mozilla/5.0 (compatible; NeuralwireBot/1.0-dev; +https://neuralwire.example)` | User-Agent for outbound RSS/scrape requests; set a real bot UA + domain before going public |
+| `STATIC_DIR`         | `../frontend/build`           | Path to the built frontend (adapter-static output). When it exists, the server serves the SPA (fallback to `index.html`) so frontend + API run from one process |
 | `CORS_ALLOW_ORIGIN`  | `http://localhost:5173,http://127.0.0.1:5173` | Comma-separated allowed frontend origins |
 | `AI_SUMMARY_API_KEY` | *(empty)*                     | API key for the OpenAI-compatible summary endpoint   |
 | `AI_SUMMARY_PROVIDER`| `openai`                      | Preset: `openai`, `gemini`, `openrouter`, `groq`, `ollama` |

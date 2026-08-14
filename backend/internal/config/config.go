@@ -87,6 +87,10 @@ type Config struct {
 	// LogFormat is the structured log output format: "text" (default) or
 	// "json".
 	LogFormat string
+	// StaticDir is the path to the built frontend (adapter-static output).
+	// When non-empty and the directory exists, the server serves these static
+	// files so the frontend and API run from one process in production.
+	StaticDir string
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -175,6 +179,7 @@ func Load() (Config, error) {
 		HTTPCompressionEnabled:   compressionEnabled == nil || *compressionEnabled,
 		LogLevel:                 strings.ToLower(strings.TrimSpace(getenv("LOG_LEVEL", "info"))),
 		LogFormat:                strings.ToLower(strings.TrimSpace(getenv("LOG_FORMAT", "text"))),
+		StaticDir:                strings.TrimSpace(getenv("STATIC_DIR", "../frontend/build")),
 	}, nil
 }
 

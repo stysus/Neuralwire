@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { BASE_URL } from '$lib/api';
 
 	interface FetchProgressData {
 		running: boolean;
@@ -23,7 +24,7 @@
 		const token = localStorage.getItem('admin_token');
 		if (!token) return;
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/fetch/progress', {
+			const res = await fetch(`${BASE_URL}/admin/fetch/progress`, {
 				headers: { Authorization: `Bearer ${token}` }
 			});
 			if (res.ok) {
@@ -39,7 +40,7 @@
 		if (!token || cancelling) return;
 		cancelling = true;
 		try {
-			await fetch('http://localhost:8080/api/admin/fetch/cancel', {
+			await fetch(`${BASE_URL}/admin/fetch/cancel`, {
 				method: 'POST',
 				headers: { Authorization: `Bearer ${token}` }
 			});

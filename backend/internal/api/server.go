@@ -8,6 +8,9 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,6 +64,8 @@ type Server struct {
 	disableCompression bool
 	// metrics collects runtime counters exposed via GET /api/metrics.
 	metrics *metrics.Metrics
+	// staticDir is the frontend build directory served at "/" when present.
+	staticDir string
 }
 
 // ServerOptions configures the API server.
@@ -102,6 +107,9 @@ type ServerOptions struct {
 	// Metrics collects runtime counters exposed via GET /api/metrics. When
 	// nil, a fresh collector is used so the endpoint always responds.
 	Metrics *metrics.Metrics
+	// StaticDir is the frontend build directory served at "/" (SPA fallback
+	// to index.html). Empty disables static serving.
+	StaticDir string
 }
 
 // NewServer builds a Server.
@@ -138,6 +146,7 @@ func NewServer(opts ServerOptions) *Server {
 		trustProxy:         opts.TrustProxy,
 		disableCompression: opts.DisableCompression,
 		metrics:            opts.Metrics,
+		staticDir:          opts.StaticDir,
 	}
 	if opts.ViewRateLimit > 0 {
 		srv.viewLimiter = ratelimit.New(opts.ViewRateLimit, opts.ViewRateWindow)
@@ -197,6 +206,34 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/admin/settings", s.requireAuth(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/admin/settings", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUpdateSettings))))
 	mux.Handle("/api/admin/", s.requireAuth(s.csrfProtect(admin)))
+
+	// Serve the built frontend when a static directory is configured. The
+	// SPA fallback returns index.html for unknown non-API routes so client
+	// side routing works (e.g. /some-article-slug).
+	if s.staticDir != "" {
+		if info, err := os.Stat(s.staticDir); err == nil && info.IsDir() {
+			fileServer := http.FileServer(http.Dir(s.staticDir))
+			mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+				path := r.URL.Path
+				if path == "/" {
+					path = "/index.html"
+				}
+				// Let the file server decide; if the asset does not exist,
+				// fall back to index.html for SPA routes.
+				candidate := http.Dir(s.staticDir)
+				if _, err := candidate.Open(strings.TrimPrefix(path, "/")); err != nil {
+					http.ServeFile(w, r, filepath.Join(s.staticDir, "index.html"))
+					return
+				}
+				fileServer.ServeHTTP(w, r)
+			})
+		} else {
+			s.slog.Warn("api: static dir not found; frontend not served",
+				"static_dir", s.staticDir,
+				"error", err,
+			)
+		}
+	}
 
 	// Middleware order: recover -> rateLimit -> securityHeaders -> log -> cors
 	// -> cacheControl -> etag -> compress. ETag runs outside compression so the

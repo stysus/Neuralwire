@@ -1,0 +1,60 @@
+# syntax=docker/dockerfile:1
+
+# ---------------------------------------------------------------------------
+# Stage 1: build the SvelteKit frontend (adapter-static -> frontend/build)
+# ---------------------------------------------------------------------------
+FROM node:24-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Dependency layer first for build cache reuse.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# Source + static assets, then build the static export.
+COPY frontend/ ./
+RUN npm run build
+
+# ---------------------------------------------------------------------------
+# Stage 2: compile the Go backend
+# ---------------------------------------------------------------------------
+FROM golang:1.25-alpine AS backend-builder
+
+WORKDIR /app/backend
+
+# Cache Go modules before copying source.
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+
+COPY backend/ ./
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/neuralwire-server ./cmd/server
+
+# ---------------------------------------------------------------------------
+# Stage 3: minimal runtime image
+# ---------------------------------------------------------------------------
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -S neuralwire && adduser -S -G neuralwire neuralwire
+
+WORKDIR /app
+
+# Backend binary + built frontend static files.
+COPY --from=backend-builder /out/neuralwire-server /app/neuralwire-server
+COPY --from=frontend-builder /app/frontend/build /app/static
+
+# Data directory for SQLite; owned by the non-root user.
+RUN mkdir -p /app/data && chown -R neuralwire:neuralwire /app
+
+USER neuralwire
+
+ENV STATIC_DIR=/app/static \
+    DB_PATH=/app/data/neuralwire.db \
+    PORT=8080
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget -qO- http://127.0.0.1:8080/api/healthz >/dev/null 2>&1 || exit 1
+
+ENTRYPOINT ["/app/neuralwire-server"]

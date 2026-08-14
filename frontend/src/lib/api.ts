@@ -1,6 +1,10 @@
+import { env } from '$env/dynamic/public';
 import { mockCategories, type Category, type News } from './mockData';
 
-export const BASE_URL = 'http://localhost:8080/api';
+export const BASE_URL = (env.PUBLIC_API_URL?.trim() || 'http://localhost:8080/api').replace(
+	/\/+$/,
+	''
+);
 
 /**
  * Gets SvelteKit-compatible fetch or global fetch.

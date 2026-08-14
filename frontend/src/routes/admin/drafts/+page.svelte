@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import Image from '$lib/Image.svelte';
 	import FetchProgress from '$lib/FetchProgress.svelte';
+	import { BASE_URL } from '$lib/api';
 
 	// Retrieve active page from URL query params
 	let currentPage = $derived(Number($pageStore.url.searchParams.get('page')) || 1);
@@ -57,7 +58,7 @@
 		scrapeError = null;
 
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/fetch', {
+			const res = await fetch(`${BASE_URL}/admin/fetch`, {
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${token}`
@@ -111,7 +112,7 @@
 		if (!token) return;
 
 		try {
-			let url = `http://localhost:8080/api/admin/news?status=draft&page=${pageNumber}&page_size=${pageSize}`;
+			let url = `${BASE_URL}/admin/news?status=draft&page=${pageNumber}&page_size=${pageSize}`;
 			if (selectedCategory) {
 				url += `&category=${encodeURIComponent(selectedCategory)}`;
 			}
@@ -161,7 +162,7 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${id}/publish`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${id}/publish`, {
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${token}`
@@ -191,7 +192,7 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${id}/reject`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${id}/reject`, {
 				method: 'POST',
 				headers: {
 					Authorization: `Bearer ${token}`
@@ -221,7 +222,7 @@
 		if (!token) return;
 
 		try {
-			const res = await fetch(`http://localhost:8080/api/admin/news/${id}`, {
+			const res = await fetch(`${BASE_URL}/admin/news/${id}`, {
 				method: 'DELETE',
 				headers: {
 					Authorization: `Bearer ${token}`
@@ -260,7 +261,7 @@
 
 		isDeletingAll = true;
 		try {
-			const res = await fetch('http://localhost:8080/api/admin/news?status=draft', {
+			const res = await fetch(`${BASE_URL}/admin/news?status=draft`, {
 				method: 'DELETE',
 				headers: {
 					Authorization: `Bearer ${token}`

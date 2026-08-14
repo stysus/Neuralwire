@@ -4,6 +4,7 @@
 	import type { News } from '$lib/mockData';
 	import Image from '$lib/Image.svelte';
 	import { absoluteUrl, getSiteUrl } from '$lib/siteUrl';
+	import { BASE_URL } from '$lib/api';
 
 	let { data }: { data: PageData } = $props();
 
@@ -159,7 +160,7 @@
 
 	onMount(() => {
 		const viewerKey = getViewerKey();
-		fetch(`http://localhost:8080/api/news/${article.id}/view`, {
+		fetch(`${BASE_URL}/news/${article.id}/view`, {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ viewer_key: viewerKey })

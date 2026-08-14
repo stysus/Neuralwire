@@ -1,4 +1,4 @@
-import { getNewsBySlug, getNews } from '$lib/api';
+import { getNewsBySlug, getNews, BASE_URL } from '$lib/api';
 import type { News } from '$lib/mockData';
 import { error } from '@sveltejs/kit';
 import type { PageLoad } from './$types';
@@ -15,7 +15,7 @@ export const load: PageLoad = async ({ fetch, params }) => {
 
 	let related: News[] = [];
 	try {
-		const res = await fetch(`http://localhost:8080/api/news/${article.id}/related?limit=12`, {
+		const res = await fetch(`${BASE_URL}/news/${article.id}/related?limit=12`, {
 			signal: AbortSignal.timeout(2000)
 		});
 		if (res.ok) {

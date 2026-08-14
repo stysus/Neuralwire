@@ -147,6 +147,7 @@ func main() {
 		Fetcher:            rssFetcher,
 		Logger:             logger,
 		Slog:               slogLogger,
+		StaticDir:          cfg.StaticDir,
 	})
 
 	httpServer := &http.Server{

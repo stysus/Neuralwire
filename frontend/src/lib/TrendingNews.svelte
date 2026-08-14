@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { BASE_URL } from '$lib/api';
 
 	interface TrendingArticle {
 		id: number;
@@ -29,7 +30,7 @@
 		errorMessage = '';
 
 		try {
-			const res = await fetch('http://localhost:8080/api/news/trending?window=week&limit=5', {
+			const res = await fetch(`${BASE_URL}/news/trending?window=week&limit=5`, {
 				headers: { Accept: 'application/json' }
 			});
 
