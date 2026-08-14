@@ -3,8 +3,41 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { getSiteUrl } from '$lib/siteUrl';
 
 	let { children, data } = $props();
+
+	// JSON-LD structured data, rendered into <svelte:head> below. The tag is
+	// assembled via concatenation so the raw tag opener never appears
+	// literally in this file (Svelte's parser would otherwise treat it as a
+	// second top-level tag). `</` is escaped so a value containing the
+	// closing tag sequence cannot break out of the tag.
+	const websiteJsonLdHtml =
+		'<scr' +
+		'ipt type="application/ld+json">' +
+		JSON.stringify({
+			'@context': 'https://schema.org',
+			'@type': 'WebSite',
+			name: 'Neuralwire',
+			url: getSiteUrl()
+		}).replace(/</g, '\\u003c') +
+		'</scr' +
+		'ipt>';
+	const organizationJsonLdHtml =
+		'<scr' +
+		'ipt type="application/ld+json">' +
+		JSON.stringify({
+			'@context': 'https://schema.org',
+			'@type': 'Organization',
+			name: 'Neuralwire',
+			url: getSiteUrl(),
+			logo: {
+				'@type': 'ImageObject',
+				url: getSiteUrl() + '/favicon.svg'
+			}
+		}).replace(/</g, '\\u003c') +
+		'</scr' +
+		'ipt>';
 
 	// Search state
 	let searchQuery = $state('');
@@ -36,6 +69,9 @@
 	<meta name="robots" content="index, follow" />
 	<meta property="og:site_name" content="Neuralwire" />
 	<meta name="twitter:card" content="summary_large_image" />
+	<!-- Structured data: WebSite + Organization -->
+	{@html websiteJsonLdHtml}
+	{@html organizationJsonLdHtml}
 </svelte:head>
 
 <div

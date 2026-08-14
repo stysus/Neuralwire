@@ -12,6 +12,46 @@
 	const related = $derived(data.related as News[]);
 	const displayItems = $derived([...related, ...related, ...related]);
 
+	// JSON-LD structured data, rendered into <svelte:head> below. The tag is
+	// assembled via concatenation so the raw tag opener never appears
+	// literally in this file. Dates come from the Neuralwire record
+	// (published_at), not the source article's own date; authorship is the
+	// site as an Organization (web curator), avoiding fictional authors. `</`
+	// is escaped so a value containing the closing tag sequence cannot break
+	// out of the tag.
+	const articleJsonLdHtml = $derived(
+		'<scr' +
+			'ipt type="application/ld+json">' +
+			JSON.stringify({
+				'@context': 'https://schema.org',
+				'@type': 'NewsArticle',
+				headline: article.title,
+				image: [absoluteUrl(article.image_url)],
+				datePublished: article.published_at || article.created_at,
+				dateModified: article.published_at || article.created_at,
+				author: {
+					'@type': 'Organization',
+					name: 'Neuralwire',
+					url: getSiteUrl()
+				},
+				publisher: {
+					'@type': 'Organization',
+					name: 'Neuralwire',
+					url: getSiteUrl(),
+					logo: {
+						'@type': 'ImageObject',
+						url: getSiteUrl() + '/favicon.svg'
+					}
+				},
+				mainEntityOfPage: {
+					'@type': 'WebPage',
+					'@id': getSiteUrl() + '/' + article.slug
+				}
+			}).replace(/</g, '\\u003c') +
+			'</scr' +
+			'ipt>'
+	);
+
 	function formatDate(dateStr: string) {
 		const d = new Date(dateStr);
 		return d.toLocaleDateString('en-US', {
@@ -186,6 +226,8 @@
 	<meta name="twitter:title" content={article.title} />
 	<meta name="twitter:description" content={article.summary} />
 	<meta name="twitter:image" content={absoluteUrl(article.image_url)} />
+	<!-- Structured data: NewsArticle -->
+	{@html articleJsonLdHtml}
 </svelte:head>
 
 <article class="relative w-full flex-grow pb-16">
