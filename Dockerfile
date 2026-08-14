@@ -46,7 +46,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/neuralwire-server 
 # ---------------------------------------------------------------------------
 FROM alpine:3.20
 
-RUN apk add --no-cache ca-certificates tzdata && \
+RUN apk add --no-cache ca-certificates tzdata su-exec && \
     addgroup -S neuralwire && adduser -S -G neuralwire neuralwire
 
 WORKDIR /app
@@ -58,7 +58,15 @@ COPY --from=frontend-builder /app/frontend/build /app/static
 # Data directory for SQLite; owned by the non-root user.
 RUN mkdir -p /app/data && chown -R neuralwire:neuralwire /app
 
-USER neuralwire
+# NOTE: we intentionally do NOT set `USER neuralwire` here. The entrypoint
+# runs as root so it can chown Railway-attached volumes (mounted as root),
+# then drops privileges with su-exec before exec'ing the server.
+
+# The app runs as a non-root user, but Railway-attached volumes are mounted
+# with root ownership. An entrypoint that chowns the data dir before exec
+# fixes the permission mismatch, so SQLite can create its DB file.
+COPY --chown=neuralwire:neuralwire docker-entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV STATIC_DIR=/app/static \
     DB_PATH=/app/data/neuralwire.db \
@@ -69,4 +77,4 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD wget -qO- http://127.0.0.1:8080/api/healthz >/dev/null 2>&1 || exit 1
 
-ENTRYPOINT ["/app/neuralwire-server"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
