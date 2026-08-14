@@ -8,11 +8,17 @@ on:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'docker-entrypoint.sh'
       - '.github/workflows/backend-ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'backend/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - 'docker-entrypoint.sh'
       - '.github/workflows/backend-ci.yml'
 
 permissions:
