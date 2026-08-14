@@ -195,11 +195,16 @@ func (s *Server) rateLimit(next http.Handler) http.Handler {
 //   - X-Frame-Options: DENY — prevents clickjacking
 //   - Referrer-Policy: strict-origin-when-cross-origin — limits referrer leaks
 //   - Permissions-Policy — disables unused browser features
-//   - Content-Security-Policy — restricts script/image sources (anti-XSS)
+//   - Content-Security-Policy — restricts script/style/image sources (anti-XSS)
 //
-// Note: CSP is intentionally permissive for images (img-src * data:) because
-// cover images come from many third-party CDNs. Admin-created content is
-// rendered via {@html}; CSP default-src 'self' still blocks inline scripts.
+// Notes:
+//   - script-src allows 'unsafe-inline' because the SvelteKit static build
+//     embeds an inline bootstrap script in index.html; blocking it (as the
+//     original 'self'-only policy did) made the SPA render blank in production.
+//   - Google Fonts (styles/fonts) are allowed so the frontend theme loads.
+//   - connect-src is 'self' because the frontend is served by this same
+//     backend at /api (same origin); the old hardcoded localhost:8080 entry is
+//     not valid in production.
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -208,9 +213,11 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		h.Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "+
-				"img-src 'self' data: https: http:; font-src 'self' data:; "+
-				"connect-src 'self' http://localhost:8080; frame-ancestors 'none'; base-uri 'self'")
+			"default-src 'self'; script-src 'self' 'unsafe-inline'; "+
+				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
+				"img-src 'self' data: https: http:; "+
+				"font-src 'self' data: https://fonts.gstatic.com; "+
+				"connect-src 'self'; frame-ancestors 'none'; base-uri 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
