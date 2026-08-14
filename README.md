@@ -283,6 +283,37 @@ docker compose up -d --build
 
 > **Volume note:** the container runs as non-root user `neuralwire`. The `docker-entrypoint.sh` chowns the attached volume before starting so SQLite can write.
 
+### Releases & Rollback
+
+**Releases are tagged** with semantic versions. The latest tag deployed to production is the current release.
+
+```bash
+# Create & push a new release tag
+git tag -a v1.1.0 -m "Release v1.1.0"
+git push origin v1.1.0
+```
+
+**Rollback — 1 of 2 ways:**
+
+1. **Via Railway UI (fastest):** Railway → Service → Deployments → select the previous successful deployment → **Redeploy**.
+
+2. **Via git tag (recommended for permanent rollback):**
+```bash
+# Point main back at a known-good release and push (through a PR)
+git checkout -b rollback-v1.0.0 origin/main
+git revert --no-commit <bad-commit-range>   # or reset to the tag
+git push -u origin rollback-v1.0.0
+# Open a PR -> CI must pass -> merge -> Railway auto-deploys
+```
+
+**When to rollback:**
+- 5xx errors spike after a deploy
+- Admin login / fetch pipeline broken
+- Frontend blank or assets 404
+- Health check (`/api/healthz`) not returning 200
+
+**After rollback:** investigate the root cause on `development`, fix it, and ship a new release — do not keep patching the rolled-back code.
+
 ---
 
 ## Security
