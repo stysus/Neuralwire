@@ -78,7 +78,8 @@
 		<div
 			class="rounded-xl border border-[rgba(34,211,238,0.15)] bg-[#22D3EE]/5 p-6 font-mono text-xs text-slate-300"
 		>
-			<span class="font-bold text-[#22D3EE]">Email Address:</span> legal@neuralwire.media<br />
+			<span class="font-bold text-[#22D3EE]">Copyright Agent:</span> Neuralwire Media<br />
+			<span class="font-bold text-[#22D3EE]">Email Address:</span> stysus@proton.me<br />
 			<span class="font-bold text-[#22D3EE]">Subject:</span> Copyright / DMCA Takedown Request
 			[NW-ID]<br />
 			<span class="font-bold text-[#22D3EE]">Required Details:</span>
@@ -97,7 +98,8 @@
 		</h2>
 		<p>
 			Our automated crawlers crawl articles using the unique User-Agent identifier: <code
-				class="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-400">NeuralwireBot/1.0</code
+				class="rounded bg-slate-800 px-1.5 py-0.5 text-cyan-400"
+				>Mozilla/5.0 (compatible; NeuralwireBot/1.0; +https://neuralwire.info)</code
 			>. We honor standard <code class="rounded bg-slate-800 px-1.5 py-0.5">robots.txt</code> directives.
 			If you wish to block our scraper, you can block our User-Agent in your site's robots.txt file.
 		</p>
