@@ -25,6 +25,7 @@ services:
       PORT: "8080"
       DB_PATH: /app/data/neuralwire.db
       STATIC_DIR: /app/static
+      UPLOAD_DIR: /app/data/uploads
       # Required in production — never use defaults:
       ADMIN_USERNAME: ${ADMIN_USERNAME:?set ADMIN_USERNAME in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}

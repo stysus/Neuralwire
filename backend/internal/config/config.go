@@ -91,6 +91,10 @@ type Config struct {
 	// When non-empty and the directory exists, the server serves these static
 	// files so the frontend and API run from one process in production.
 	StaticDir string
+	// UploadDir is the directory where admin-uploaded images are stored. It
+	// must be writable by the server process; in production it should point
+	// at a persistent volume. Files are served under /uploads/.
+	UploadDir string
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -180,6 +184,7 @@ func Load() (Config, error) {
 		LogLevel:                 strings.ToLower(strings.TrimSpace(getenv("LOG_LEVEL", "info"))),
 		LogFormat:                strings.ToLower(strings.TrimSpace(getenv("LOG_FORMAT", "text"))),
 		StaticDir:                strings.TrimSpace(getenv("STATIC_DIR", "../frontend/build")),
+		UploadDir:                strings.TrimSpace(getenv("UPLOAD_DIR", "./data/uploads")),
 	}, nil
 }
 

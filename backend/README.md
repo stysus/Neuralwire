@@ -68,6 +68,10 @@ English by default).
   plus a multi-stage `Dockerfile` and `docker-compose.yml` that build the
   frontend, compile the backend, and run both from one minimal non-root
   container with a health check
+- **Admin image uploads**: `POST /api/admin/upload-image` accepts an image
+  (jpeg/png/webp/gif, ≤ 5 MiB), stores it under `UPLOAD_DIR` with a random
+  name, and serves it at `/uploads/...`. In the Docker image `UPLOAD_DIR`
+  points at the persistent volume so uploaded images survive redeploys
 
 ## Requirements
 
@@ -158,13 +162,29 @@ a timer and optionally auto-publish qualifying drafts. It is configured via
 }
 ```
 
-- `enabled` — turn the scheduler on/off.
+- `enabled` — part of the stored configuration; the scheduler only runs when
+  it is true **and** the scheduler has been started (see below).
 - `auto_post_enabled` — additionally publish drafts that pass the filters.
   When false, the scheduler only fetches (creates drafts for admin review).
 - `interval_minutes` — how often a cycle runs (minimum 5, default 360 = 6h).
 - `categories` — whitelist of categories eligible for auto-publish; empty = all.
-- `min_score_label` — minimum value label (`low`/`medium`/`high`) to
-  auto-publish; empty = any.
+- `min_score_label` — legacy single minimum value label (`low`/`medium`/`high`);
+  kept for backward compatibility.
+- `min_score_labels` — whitelist of value labels to auto-publish (STY-60),
+  e.g. `["medium","high"]`. When set it takes precedence over
+  `min_score_label`; empty = any label.
+- `max_posts_per_cycle` — cap on how many drafts are auto-published in one
+  cycle (STY-60); 0 = unlimited.
+- `post_interval_minutes` — independent interval for the auto-post step
+  (STY-60); 0 = post on the same schedule as fetch.
+
+**Saving the config does not start the scheduler.** Use the separate
+endpoints (admin "Start/Stop config" buttons):
+
+- `POST /api/admin/autopublish/start` — activate the scheduler.
+- `POST /api/admin/autopublish/stop` — deactivate the scheduler.
+- `GET /api/admin/autopublish` returns `running` (whether the scheduler is
+  active) alongside the config.
 
 The scheduler never publishes outside the filters; everything else stays a
 draft for admin review, preserving the curator model.

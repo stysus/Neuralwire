@@ -61,6 +61,37 @@
 		});
 	}
 
+	// Canonical absolute URL of the article, used by the share buttons.
+	const shareUrl = $derived(getSiteUrl() + '/' + article.slug);
+
+	function openShare(url: string) {
+		window.open(url, '_blank', 'noopener,width=600,height=500');
+	}
+
+	function shareOnX() {
+		openShare(
+			'https://twitter.com/intent/tweet?url=' +
+				encodeURIComponent(shareUrl) +
+				'&text=' +
+				encodeURIComponent(article.title)
+		);
+	}
+
+	function shareOnLinkedIn() {
+		openShare(
+			'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl)
+		);
+	}
+
+	function shareOnReddit() {
+		openShare(
+			'https://www.reddit.com/submit?url=' +
+				encodeURIComponent(shareUrl) +
+				'&title=' +
+				encodeURIComponent(article.title)
+		);
+	}
+
 	// Feedback Form State
 	let opinion = $state('');
 	let email = $state('');
@@ -364,9 +395,27 @@
 
 			<div class="flex items-center space-x-4">
 				<span class="text-slate-400">Share:</span>
-				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">X</button>
-				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">LinkedIn</button>
-				<button class="cursor-pointer transition-colors hover:text-[#22D3EE]">Reddit</button>
+				<button
+					type="button"
+					onclick={shareOnX}
+					class="cursor-pointer transition-colors hover:text-[#22D3EE]"
+				>
+					X
+				</button>
+				<button
+					type="button"
+					onclick={shareOnLinkedIn}
+					class="cursor-pointer transition-colors hover:text-[#22D3EE]"
+				>
+					LinkedIn
+				</button>
+				<button
+					type="button"
+					onclick={shareOnReddit}
+					class="cursor-pointer transition-colors hover:text-[#22D3EE]"
+				>
+					Reddit
+				</button>
 			</div>
 		</div>
 

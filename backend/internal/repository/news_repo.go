@@ -204,9 +204,9 @@ func (r *NewsRepository) ListAdmin(status, category, valueLabel string, page, pa
 
 // AutoPublishCandidates returns draft articles that are eligible for
 // auto-publishing under the given filters: an optional category whitelist
-// (empty = all) and an optional minimum value label ("" = any). Results are
-// newest first, capped at limit.
-func (r *NewsRepository) AutoPublishCandidates(categories []string, minLabel string, limit int) ([]models.News, error) {
+// (empty = all) and an optional value-label whitelist (empty = any). Results
+// are newest first, capped at limit.
+func (r *NewsRepository) AutoPublishCandidates(categories, minLabels []string, limit int) ([]models.News, error) {
 	where := "WHERE status = ?"
 	args := []any{string(models.StatusDraft)}
 	if len(categories) > 0 {
@@ -217,10 +217,14 @@ func (r *NewsRepository) AutoPublishCandidates(categories []string, minLabel str
 		}
 		where += " AND category IN (" + strings.Join(placeholders, ",") + ")"
 	}
-	if minLabel != "" {
-		// value_label stores LOW/MEDIUM/HIGH (upper). Compare case-insensitively.
-		where += " AND LOWER(value_label) >= LOWER(?)"
-		args = append(args, minLabel)
+	if len(minLabels) > 0 {
+		placeholders := make([]string, len(minLabels))
+		for i, l := range minLabels {
+			placeholders[i] = "?"
+			args = append(args, l)
+		}
+		// value_label stores LOW/MEDIUM/HIGH (upper). Match case-insensitively.
+		where += " AND LOWER(value_label) IN (" + strings.Join(placeholders, ",") + ")"
 	}
 
 	query := `SELECT ` + newsColumns + ` FROM news ` + where +

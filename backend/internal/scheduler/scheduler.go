@@ -31,8 +31,17 @@ type Scheduler struct {
 	stop    chan struct{}
 	stopped chan struct{}
 	mu      sync.Mutex
+	// running reports whether the scheduler loop goroutine is alive. It is
+	// toggled by Start/Stop (i.e. the admin "Start/Stop config" buttons).
 	running bool
-	lastRun time.Time
+	// active reports whether the stored config has Enabled=true. The loop
+	// checks it each tick; admin can save config (enabled true) without the
+	// loop acting on it until Start is pressed.
+	active bool
+	// lastFetch / lastPost track the last time each step ran so fetch and
+	// post can have independent intervals (STY-60).
+	lastFetch time.Time
+	lastPost  time.Time
 }
 
 // New builds a Scheduler. A nil logger uses slog.Default().
@@ -78,6 +87,22 @@ func (s *Scheduler) Stop() {
 	<-s.stopped
 }
 
+// SetActive toggles whether the scheduler acts on the stored config. This is
+// the admin "Start config / Stop config" control: saving config with
+// Enabled=true does not run anything until SetActive(true) is called.
+func (s *Scheduler) SetActive(active bool) {
+	s.mu.Lock()
+	s.active = active
+	s.mu.Unlock()
+}
+
+// Active reports whether the scheduler is currently active.
+func (s *Scheduler) Active() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active
+}
+
 func (s *Scheduler) loop() {
 	defer close(s.stopped)
 
@@ -98,32 +123,44 @@ func (s *Scheduler) loop() {
 	}
 }
 
-// runOnceIfEnabled checks the stored config and, when enabled, runs a cycle
-// if the interval has elapsed.
+// runOnceIfEnabled checks the stored config and, when the scheduler is
+// active (Start config pressed) and the stored config has Enabled=true, runs
+// a cycle if the interval has elapsed.
 func (s *Scheduler) runOnceIfEnabled() {
+	s.mu.Lock()
+	active := s.active
+	s.mu.Unlock()
+	if !active {
+		return
+	}
+
 	cfg := s.repo.GetAutoPublishConfig()
 	if !cfg.Enabled {
 		return
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	s.maybeFetch(ctx, cfg)
+	s.maybePost(ctx, cfg)
+}
+
+// maybeFetch runs the fetch step if the fetch interval has elapsed.
+func (s *Scheduler) maybeFetch(ctx context.Context, cfg models.AutoPublishConfig) {
 	interval := time.Duration(cfg.IntervalMinutes) * time.Minute
 	if interval <= 0 {
 		interval = 6 * time.Hour
 	}
 
-	// Re-run at most once per interval, using an in-memory marker. On
-	// process restart the first cycle runs immediately, which is acceptable.
 	s.mu.Lock()
-	if !s.lastRun.IsZero() && time.Since(s.lastRun) < interval {
+	if !s.lastFetch.IsZero() && time.Since(s.lastFetch) < interval {
 		s.mu.Unlock()
 		return
 	}
 	s.mu.Unlock()
 
-	s.logger.Info("scheduler: running auto cycle", "interval_minutes", cfg.IntervalMinutes)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-
+	s.logger.Info("scheduler: running auto fetch", "interval_minutes", cfg.IntervalMinutes)
 	stats, err := s.job.Fetch(ctx)
 	if err != nil {
 		s.logger.Error("scheduler: fetch cycle failed", "error", err)
@@ -134,18 +171,42 @@ func (s *Scheduler) runOnceIfEnabled() {
 			"fallback", stats.Fallback,
 		)
 	}
+	s.mu.Lock()
+	s.lastFetch = time.Now()
+	s.mu.Unlock()
+}
 
-	if cfg.AutoPostEnabled {
-		n, err := s.job.AutoPost(ctx, cfg)
-		if err != nil {
-			s.logger.Error("scheduler: auto post failed", "error", err)
-		} else {
-			s.logger.Info("scheduler: auto post complete", "published", n)
-		}
+// maybePost runs the auto-post step if enabled and its (independent) interval
+// has elapsed.
+func (s *Scheduler) maybePost(ctx context.Context, cfg models.AutoPublishConfig) {
+	if !cfg.AutoPostEnabled {
+		return
+	}
+
+	interval := time.Duration(cfg.PostIntervalMinutes) * time.Minute
+	if interval <= 0 {
+		interval = time.Duration(cfg.IntervalMinutes) * time.Minute
+	}
+	if interval <= 0 {
+		interval = 6 * time.Hour
 	}
 
 	s.mu.Lock()
-	s.lastRun = time.Now()
+	if !s.lastPost.IsZero() && time.Since(s.lastPost) < interval {
+		s.mu.Unlock()
+		return
+	}
+	s.mu.Unlock()
+
+	s.logger.Info("scheduler: running auto post", "post_interval_minutes", cfg.PostIntervalMinutes)
+	n, err := s.job.AutoPost(ctx, cfg)
+	if err != nil {
+		s.logger.Error("scheduler: auto post failed", "error", err)
+	} else {
+		s.logger.Info("scheduler: auto post complete", "published", n)
+	}
+	s.mu.Lock()
+	s.lastPost = time.Now()
 	s.mu.Unlock()
 }
 
@@ -164,10 +225,20 @@ func filterMatch(n models.News, cfg models.AutoPublishConfig) bool {
 			return false
 		}
 	}
-	if cfg.MinScoreLabel != "" {
-		// Label comparison is order-independent here: the caller passes the
-		// minimum label, and the article must be at or above it. The simple
-		// ranking is low < medium < high.
+	if len(cfg.MinScoreLabels) > 0 {
+		found := false
+		for _, l := range cfg.MinScoreLabels {
+			if strings.EqualFold(strings.TrimSpace(l), strings.TrimSpace(n.ValueLabel)) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	} else if cfg.MinScoreLabel != "" {
+		// Backward-compatible single minimum label: the article must be at or
+		// above it. The simple ranking is low < medium < high.
 		if !labelAtLeast(n.ValueLabel, cfg.MinScoreLabel) {
 			return false
 		}

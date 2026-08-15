@@ -1,12 +1,18 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -136,7 +142,95 @@ func xmlEscape(s string) string {
 	return replacer.Replace(s)
 }
 
-// handleRobotsTXT serves robots.txt with a single consolidated block:
+// maxUploadBytes is the largest accepted admin image upload.
+const maxUploadBytes = 5 << 20 // 5 MiB
+
+// allowedImageTypes maps MIME types to their file extension.
+var allowedImageTypes = map[string]string{
+	"image/jpeg": ".jpg",
+	"image/png":  ".png",
+	"image/webp": ".webp",
+	"image/gif":  ".gif",
+}
+
+// handleUploadImage stores an admin-uploaded image and returns its public
+// URL. Only image MIME types are accepted; the file is saved with a random
+// name under the configured upload directory (served at /uploads/).
+func (s *Server) handleUploadImage(w http.ResponseWriter, r *http.Request) {
+	if s.uploadDir == "" {
+		s.writeError(w, http.StatusServiceUnavailable, "uploads are not configured")
+		return
+	}
+
+	// Limit body size before parsing multipart.
+	r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes+1<<20)
+	if err := r.ParseMultipartForm(maxUploadBytes); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid multipart form or file too large")
+		return
+	}
+	defer r.MultipartForm.RemoveAll()
+
+	file, header, err := r.FormFile("image")
+	if err != nil {
+		s.writeError(w, http.StatusBadRequest, "missing image file field 'image'")
+		return
+	}
+	defer file.Close()
+
+	// Validate by MIME type (detected from content, not the filename).
+	head := make([]byte, 512)
+	if _, err := io.ReadFull(file, head); err != nil && err != io.ErrUnexpectedEOF {
+		s.writeError(w, http.StatusBadRequest, "failed to read file")
+		return
+	}
+	ext, ok := allowedImageTypes[http.DetectContentType(head)]
+	if !ok {
+		s.writeError(w, http.StatusBadRequest, "unsupported image type (use jpeg, png, webp, or gif)")
+		return
+	}
+	_ = header // keep the file name out of storage decisions; random names only
+
+	if err := os.MkdirAll(s.uploadDir, 0o755); err != nil {
+		s.slog.Error("api: create upload dir", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to create upload directory")
+		return
+	}
+
+	name, err := randomHex(16)
+	if err != nil {
+		s.slog.Error("api: generate upload name", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to generate file name")
+		return
+	}
+	filename := name + ext
+	dst, err := os.Create(filepath.Join(s.uploadDir, filename))
+	if err != nil {
+		s.slog.Error("api: create upload file", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to save upload")
+		return
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, io.MultiReader(bytes.NewReader(head), file)); err != nil {
+		s.slog.Error("api: write upload file", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to save upload")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, map[string]string{
+		"url": "/uploads/" + filename,
+	})
+}
+
+// randomHex returns n random bytes encoded as a lowercase hex string.
+func randomHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("read random: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
 // crawling is allowed, the admin area is disallowed, AI-training crawlers
 // are blocked, and the sitemap location is derived from the request host.
 //
@@ -594,13 +688,46 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetScoreThresholds())
 }
 
-// handleGetAutoPublish returns the auto fetch/publish scheduler config.
+// autoPublishResponse is the config plus the live scheduler running state.
+type autoPublishResponse struct {
+	models.AutoPublishConfig
+	Running bool `json:"running"`
+}
+
+// handleGetAutoPublish returns the auto fetch/publish scheduler config and
+// whether the scheduler is currently running (Start pressed).
 func (s *Server) handleGetAutoPublish(w http.ResponseWriter, r *http.Request) {
 	if s.settingsRepo == nil {
 		s.writeError(w, http.StatusServiceUnavailable, "settings repository is not configured")
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetAutoPublishConfig())
+	resp := autoPublishResponse{
+		AutoPublishConfig: s.settingsRepo.GetAutoPublishConfig(),
+	}
+	if s.scheduler != nil {
+		resp.Running = s.scheduler.Active()
+	}
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// handleStartAutoPublish activates the scheduler (admin "Start config").
+func (s *Server) handleStartAutoPublish(w http.ResponseWriter, r *http.Request) {
+	if s.scheduler == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "scheduler is not configured")
+		return
+	}
+	s.scheduler.SetActive(true)
+	s.writeJSON(w, http.StatusOK, map[string]any{"running": true})
+}
+
+// handleStopAutoPublish deactivates the scheduler (admin "Stop config").
+func (s *Server) handleStopAutoPublish(w http.ResponseWriter, r *http.Request) {
+	if s.scheduler == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "scheduler is not configured")
+		return
+	}
+	s.scheduler.SetActive(false)
+	s.writeJSON(w, http.StatusOK, map[string]any{"running": false})
 }
 
 // handleUpdateAutoPublish persists the auto fetch/publish scheduler config.
@@ -622,6 +749,12 @@ func (s *Server) handleUpdateAutoPublish(w http.ResponseWriter, r *http.Request)
 	}
 	if req.IntervalMinutes < 5 {
 		req.IntervalMinutes = 5
+	}
+	if req.PostIntervalMinutes < 0 {
+		req.PostIntervalMinutes = 0
+	}
+	if req.MaxPostsPerCycle < 0 {
+		req.MaxPostsPerCycle = 0
 	}
 	if err := s.settingsRepo.SetAutoPublishConfig(req); err != nil {
 		s.logger.Printf("api: update auto publish config: %v", err)
