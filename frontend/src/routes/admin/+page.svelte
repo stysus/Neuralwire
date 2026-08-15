@@ -107,6 +107,8 @@
 	let autoConfigSaving = $state(false);
 	let autoConfigSaved = $state(false);
 	let autoConfigError = $state('');
+	let schedulerRunning = $state(false);
+	let schedulerBusy = $state(false);
 
 	function toggleCategory(slug: string) {
 		if (autoConfig.categories.includes(slug)) {
@@ -147,6 +149,7 @@
 				autoConfig.min_score_label = ['low', 'medium', 'high'].includes(data.min_score_label)
 					? data.min_score_label
 					: '';
+				schedulerRunning = !!data.running;
 			} else {
 				if (res.status === 401 || res.status === 403) {
 					localStorage.removeItem('admin_token');
@@ -211,6 +214,48 @@
 			showToast('error', 'Failed to save auto publish config.', 'Save Failed');
 		} finally {
 			autoConfigSaving = false;
+		}
+	}
+
+	async function setSchedulerRunning(running: boolean) {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+		schedulerBusy = true;
+		try {
+			const res = await fetch(`${BASE_URL}/admin/autopublish/${running ? 'start' : 'stop'}`, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (res.ok) {
+				const data = await res.json();
+				schedulerRunning = !!data.running;
+				showToast(
+					'success',
+					running ? 'Scheduler started.' : 'Scheduler stopped.',
+					running ? 'Scheduler Started' : 'Scheduler Stopped'
+				);
+			} else {
+				if (res.status === 401 || res.status === 403) {
+					localStorage.removeItem('admin_token');
+					window.location.reload();
+					return;
+				}
+				const data = await res.json().catch(() => ({}));
+				showToast(
+					'error',
+					data.error || (running ? 'Failed to start scheduler.' : 'Failed to stop scheduler.'),
+					running ? 'Start Failed' : 'Stop Failed'
+				);
+			}
+		} catch (e) {
+			console.error('scheduler start/stop request failed', e);
+			showToast(
+				'error',
+				running ? 'Failed to start scheduler.' : 'Failed to stop scheduler.',
+				running ? 'Start Failed' : 'Stop Failed'
+			);
+		} finally {
+			schedulerBusy = false;
 		}
 	}
 
@@ -613,9 +658,26 @@
 				<span class="tracking-wider text-slate-500 uppercase">
 					Auto Fetch & Auto Post Pipeline
 				</span>
-				{#if autoConfigSaved}
-					<span class="text-[#22D3EE]">SAVED ✓</span>
-				{/if}
+				<div class="flex items-center gap-3">
+					{#if !autoConfigLoading}
+						<span
+							class="flex items-center gap-2 font-mono text-[10px] {schedulerRunning
+								? 'text-[#22D3EE]'
+								: 'text-slate-500'}"
+						>
+							<span
+								class="h-2 w-2 rounded-full {schedulerRunning
+									? 'animate-pulse bg-[#22D3EE]'
+									: 'bg-slate-600'}"
+								style="box-shadow: {schedulerRunning ? '0 0 8px #22D3EE' : 'none'};"
+							></span>
+							{schedulerRunning ? 'RUNNING' : 'STOPPED'}
+						</span>
+					{/if}
+					{#if autoConfigSaved}
+						<span class="text-[#22D3EE]">SAVED ✓</span>
+					{/if}
+				</div>
 			</div>
 
 			{#if autoConfigLoading}
@@ -777,19 +839,35 @@
 				</div>
 
 				<div
-					class="mt-6 flex items-center justify-between gap-3 border-t border-[rgba(255,255,255,0.04)] pt-4"
+					class="mt-6 flex flex-col gap-3 border-t border-[rgba(255,255,255,0.04)] pt-4 sm:flex-row sm:items-center sm:justify-between"
 				>
 					<span class="text-[10px] text-slate-600">
-						Auto Post publishes drafts that pass the category + score filters. Empty category filter
-						and "None" score filter disable those constraints.
+						Saving only persists the config — press Start Config to activate the scheduler. Auto
+						Post publishes drafts that pass the category + score filters.
 					</span>
-					<button
-						onclick={saveAutoConfig}
-						disabled={autoConfigSaving}
-						class="cursor-pointer rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-4 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						{autoConfigSaving ? 'Saving...' : 'Save Config'}
-					</button>
+					<div class="flex flex-wrap items-center gap-3">
+						<button
+							onclick={() => setSchedulerRunning(true)}
+							disabled={schedulerRunning || schedulerBusy}
+							class="cursor-pointer rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-4 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Start Config
+						</button>
+						<button
+							onclick={() => setSchedulerRunning(false)}
+							disabled={!schedulerRunning || schedulerBusy}
+							class="cursor-pointer rounded-lg border border-[#E11D48]/30 bg-[#E11D48]/5 px-4 py-1.5 font-mono text-xs text-[#E11D48] transition-all hover:border-[#E11D48] hover:bg-[#E11D48]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							Stop Config
+						</button>
+						<button
+							onclick={saveAutoConfig}
+							disabled={autoConfigSaving}
+							class="cursor-pointer rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-4 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+						>
+							{autoConfigSaving ? 'Saving...' : 'Save Config'}
+						</button>
+					</div>
 				</div>
 			{/if}
 		</div>
