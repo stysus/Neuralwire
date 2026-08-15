@@ -399,4 +399,7 @@ Tracked in Linear (project: NEURALWIRE):
 
 ## License
 
-© 2026 NEURALWIRE MEDIA. All rights reserved.
+MIT License — see [LICENSE](LICENSE).
+
+© 2026 NEURALWIRE MEDIA. All rights reserved for curated content; source code
+is licensed under MIT.
