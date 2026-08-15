@@ -688,13 +688,46 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetScoreThresholds())
 }
 
-// handleGetAutoPublish returns the auto fetch/publish scheduler config.
+// autoPublishResponse is the config plus the live scheduler running state.
+type autoPublishResponse struct {
+	models.AutoPublishConfig
+	Running bool `json:"running"`
+}
+
+// handleGetAutoPublish returns the auto fetch/publish scheduler config and
+// whether the scheduler is currently running (Start pressed).
 func (s *Server) handleGetAutoPublish(w http.ResponseWriter, r *http.Request) {
 	if s.settingsRepo == nil {
 		s.writeError(w, http.StatusServiceUnavailable, "settings repository is not configured")
 		return
 	}
-	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetAutoPublishConfig())
+	resp := autoPublishResponse{
+		AutoPublishConfig: s.settingsRepo.GetAutoPublishConfig(),
+	}
+	if s.scheduler != nil {
+		resp.Running = s.scheduler.Active()
+	}
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
+// handleStartAutoPublish activates the scheduler (admin "Start config").
+func (s *Server) handleStartAutoPublish(w http.ResponseWriter, r *http.Request) {
+	if s.scheduler == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "scheduler is not configured")
+		return
+	}
+	s.scheduler.SetActive(true)
+	s.writeJSON(w, http.StatusOK, map[string]any{"running": true})
+}
+
+// handleStopAutoPublish deactivates the scheduler (admin "Stop config").
+func (s *Server) handleStopAutoPublish(w http.ResponseWriter, r *http.Request) {
+	if s.scheduler == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "scheduler is not configured")
+		return
+	}
+	s.scheduler.SetActive(false)
+	s.writeJSON(w, http.StatusOK, map[string]any{"running": false})
 }
 
 // handleUpdateAutoPublish persists the auto fetch/publish scheduler config.

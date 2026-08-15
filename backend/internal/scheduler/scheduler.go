@@ -31,7 +31,13 @@ type Scheduler struct {
 	stop    chan struct{}
 	stopped chan struct{}
 	mu      sync.Mutex
+	// running reports whether the scheduler loop goroutine is alive. It is
+	// toggled by Start/Stop (i.e. the admin "Start/Stop config" buttons).
 	running bool
+	// active reports whether the stored config has Enabled=true. The loop
+	// checks it each tick; admin can save config (enabled true) without the
+	// loop acting on it until Start is pressed.
+	active  bool
 	lastRun time.Time
 }
 
@@ -78,6 +84,22 @@ func (s *Scheduler) Stop() {
 	<-s.stopped
 }
 
+// SetActive toggles whether the scheduler acts on the stored config. This is
+// the admin "Start config / Stop config" control: saving config with
+// Enabled=true does not run anything until SetActive(true) is called.
+func (s *Scheduler) SetActive(active bool) {
+	s.mu.Lock()
+	s.active = active
+	s.mu.Unlock()
+}
+
+// Active reports whether the scheduler is currently active.
+func (s *Scheduler) Active() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.active
+}
+
 func (s *Scheduler) loop() {
 	defer close(s.stopped)
 
@@ -98,9 +120,17 @@ func (s *Scheduler) loop() {
 	}
 }
 
-// runOnceIfEnabled checks the stored config and, when enabled, runs a cycle
-// if the interval has elapsed.
+// runOnceIfEnabled checks the stored config and, when the scheduler is
+// active (Start config pressed) and the stored config has Enabled=true, runs
+// a cycle if the interval has elapsed.
 func (s *Scheduler) runOnceIfEnabled() {
+	s.mu.Lock()
+	active := s.active
+	s.mu.Unlock()
+	if !active {
+		return
+	}
+
 	cfg := s.repo.GetAutoPublishConfig()
 	if !cfg.Enabled {
 		return

@@ -131,28 +131,6 @@ func main() {
 	appMetrics := metrics.New()
 	ai.SetMetrics(appMetrics)
 
-	srv := api.NewServer(api.ServerOptions{
-		NewsRepo:           newsRepo,
-		CategoryRepo:       categoryRepo,
-		SettingsRepo:       settingsRepo,
-		ViewRateLimit:      cfg.ViewRateLimit,
-		TrendingCacheTTL:   time.Duration(cfg.TrendingCacheTTLSeconds) * time.Second,
-		TrustProxy:         cfg.TrustProxy,
-		LoginRateLimit:     cfg.LoginRateLimit,
-		GlobalRateLimit:    cfg.GlobalRateLimit,
-		DisableCompression: !cfg.HTTPCompressionEnabled,
-		Metrics:            appMetrics,
-		AllowOrigins:       cfg.CORSAllowOrigins,
-		Auth:               authManager,
-		AdminUser:          cfg.AdminUsername,
-		AdminPass:          cfg.AdminPassword,
-		Fetcher:            rssFetcher,
-		Logger:             logger,
-		Slog:               slogLogger,
-		StaticDir:          cfg.StaticDir,
-		UploadDir:          cfg.UploadDir,
-	})
-
 	// Auto fetch/publish scheduler (STY-57): reads its config from
 	// app_settings (editable via the admin panel). Disabled by default.
 	sched := scheduler.New(settingsRepo, scheduler.Job{
@@ -180,6 +158,29 @@ func main() {
 	}, slogLogger)
 	sched.Start()
 	defer sched.Stop()
+
+	srv := api.NewServer(api.ServerOptions{
+		NewsRepo:           newsRepo,
+		CategoryRepo:       categoryRepo,
+		SettingsRepo:       settingsRepo,
+		ViewRateLimit:      cfg.ViewRateLimit,
+		TrendingCacheTTL:   time.Duration(cfg.TrendingCacheTTLSeconds) * time.Second,
+		TrustProxy:         cfg.TrustProxy,
+		LoginRateLimit:     cfg.LoginRateLimit,
+		GlobalRateLimit:    cfg.GlobalRateLimit,
+		DisableCompression: !cfg.HTTPCompressionEnabled,
+		Metrics:            appMetrics,
+		AllowOrigins:       cfg.CORSAllowOrigins,
+		Auth:               authManager,
+		AdminUser:          cfg.AdminUsername,
+		AdminPass:          cfg.AdminPassword,
+		Fetcher:            rssFetcher,
+		Logger:             logger,
+		Slog:               slogLogger,
+		StaticDir:          cfg.StaticDir,
+		UploadDir:          cfg.UploadDir,
+		Scheduler:          sched,
+	})
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

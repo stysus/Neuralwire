@@ -20,6 +20,7 @@ import (
 	"neuralwire/backend/internal/metrics"
 	"neuralwire/backend/internal/ratelimit"
 	"neuralwire/backend/internal/repository"
+	"neuralwire/backend/internal/scheduler"
 )
 
 // FeedFetcher runs one RSS fetch cycle and reports its progress. It is
@@ -69,6 +70,9 @@ type Server struct {
 	// uploadDir is where admin-uploaded images are stored, served at
 	// /uploads/.
 	uploadDir string
+	// scheduler controls the auto fetch/publish loop (STY-57/61). Nil
+	// disables the start/stop API.
+	scheduler *scheduler.Scheduler
 }
 
 // ServerOptions configures the API server.
@@ -116,6 +120,9 @@ type ServerOptions struct {
 	// UploadDir is where admin-uploaded images are stored. Empty disables
 	// the upload endpoint and /uploads/ serving.
 	UploadDir string
+	// Scheduler is the auto fetch/publish controller. When non-nil, the
+	// /api/admin/autopublish/start and /stop endpoints toggle it.
+	Scheduler *scheduler.Scheduler
 }
 
 // NewServer builds a Server.
@@ -154,6 +161,7 @@ func NewServer(opts ServerOptions) *Server {
 		metrics:            opts.Metrics,
 		staticDir:          opts.StaticDir,
 		uploadDir:          opts.UploadDir,
+		scheduler:          opts.Scheduler,
 	}
 	if opts.ViewRateLimit > 0 {
 		srv.viewLimiter = ratelimit.New(opts.ViewRateLimit, opts.ViewRateWindow)
@@ -216,6 +224,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("PUT /api/admin/settings", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUpdateSettings))))
 	mux.Handle("GET /api/admin/autopublish", s.requireAuth(http.HandlerFunc(s.handleGetAutoPublish)))
 	mux.Handle("PUT /api/admin/autopublish", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUpdateAutoPublish))))
+	mux.Handle("POST /api/admin/autopublish/start", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleStartAutoPublish))))
+	mux.Handle("POST /api/admin/autopublish/stop", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleStopAutoPublish))))
 	mux.Handle("POST /api/admin/upload-image", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUploadImage))))
 	mux.Handle("/api/admin/", s.requireAuth(s.csrfProtect(admin)))
 
