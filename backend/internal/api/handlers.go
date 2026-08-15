@@ -750,6 +750,12 @@ func (s *Server) handleUpdateAutoPublish(w http.ResponseWriter, r *http.Request)
 	if req.IntervalMinutes < 5 {
 		req.IntervalMinutes = 5
 	}
+	if req.PostIntervalMinutes < 0 {
+		req.PostIntervalMinutes = 0
+	}
+	if req.MaxPostsPerCycle < 0 {
+		req.MaxPostsPerCycle = 0
+	}
 	if err := s.settingsRepo.SetAutoPublishConfig(req); err != nil {
 		s.logger.Printf("api: update auto publish config: %v", err)
 		s.writeError(w, http.StatusInternalServerError, "failed to update auto publish config")

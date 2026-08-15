@@ -57,3 +57,34 @@ func TestFilterMatch(t *testing.T) {
 		t.Error("expected empty category whitelist to allow any category")
 	}
 }
+
+func TestFilterMatchMultiLabel(t *testing.T) {
+	cfg := models.AutoPublishConfig{
+		MinScoreLabels: []string{"medium", "high"},
+	}
+	news := models.News{ValueLabel: "HIGH"}
+	if !filterMatch(news, cfg) {
+		t.Error("expected HIGH to match [medium, high]")
+	}
+	news.ValueLabel = "MEDIUM"
+	if !filterMatch(news, cfg) {
+		t.Error("expected MEDIUM to match [medium, high]")
+	}
+	news.ValueLabel = "LOW"
+	if filterMatch(news, cfg) {
+		t.Error("expected LOW to be filtered out by [medium, high]")
+	}
+	// Multi-label takes precedence over legacy single label.
+	cfg2 := models.AutoPublishConfig{
+		MinScoreLabel:  "high",
+		MinScoreLabels: []string{"low"},
+	}
+	news.ValueLabel = "MEDIUM"
+	if filterMatch(news, cfg2) {
+		t.Error("expected multi-label [low] to take precedence and exclude MEDIUM")
+	}
+	news.ValueLabel = "LOW"
+	if !filterMatch(news, cfg2) {
+		t.Error("expected multi-label [low] to allow LOW")
+	}
+}

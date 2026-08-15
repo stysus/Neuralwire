@@ -138,13 +138,25 @@ func main() {
 			return rssFetcher.FetchAll(ctx)
 		},
 		AutoPost: func(ctx context.Context, cfg models.AutoPublishConfig) (int, error) {
-			// Publish eligible drafts: category whitelist + minimum score label.
-			candidates, err := newsRepo.AutoPublishCandidates(cfg.Categories, cfg.MinScoreLabel, 50)
+			// Score filter: prefer the multi-label whitelist (STY-60), fall
+			// back to the legacy single minimum label.
+			labels := cfg.MinScoreLabels
+			if len(labels) == 0 && cfg.MinScoreLabel != "" {
+				labels = []string{cfg.MinScoreLabel}
+			}
+			limit := cfg.MaxPostsPerCycle
+			if limit <= 0 {
+				limit = 50
+			}
+			candidates, err := newsRepo.AutoPublishCandidates(cfg.Categories, labels, limit)
 			if err != nil {
 				return 0, err
 			}
 			published := 0
 			for _, n := range candidates {
+				if published >= limit {
+					break
+				}
 				if err := newsRepo.SetStatus(n.ID, models.StatusPublished); err != nil {
 					slogLogger.Error("scheduler: auto publish failed", "id", n.ID, "error", err)
 					continue

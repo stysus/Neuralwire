@@ -72,18 +72,33 @@ type AutoPublishConfig struct {
 	Categories []string `json:"categories"`
 	// MinScoreLabel is the minimum value label ("high", "medium", "low") an
 	// article must have to be auto-published. Empty means no score filter.
+	// Kept for backward compatibility; prefer MinScoreLabels (STY-60).
 	MinScoreLabel string `json:"min_score_label"`
+	// MinScoreLabels is a whitelist of value labels allowed for auto-publish
+	// (e.g. ["medium","high"]). Empty means any label passes. When set it
+	// takes precedence over MinScoreLabel (STY-60).
+	MinScoreLabels []string `json:"min_score_labels,omitempty"`
+	// MaxPostsPerCycle caps how many drafts are auto-published in one cycle.
+	// 0 means unlimited.
+	MaxPostsPerCycle int `json:"max_posts_per_cycle,omitempty"`
+	// PostIntervalMinutes is how often the auto-post step runs, independent
+	// from the fetch interval. 0 means posts happen on the same schedule as
+	// fetch (STY-60).
+	PostIntervalMinutes int `json:"post_interval_minutes,omitempty"`
 }
 
 // DefaultAutoPublishConfig returns the out-of-the-box scheduler settings:
 // disabled by default, 6-hour interval, no filters.
 func DefaultAutoPublishConfig() AutoPublishConfig {
 	return AutoPublishConfig{
-		Enabled:         false,
-		AutoPostEnabled: false,
-		IntervalMinutes: 360,
-		Categories:      []string{},
-		MinScoreLabel:   "",
+		Enabled:             false,
+		AutoPostEnabled:     false,
+		IntervalMinutes:     360,
+		Categories:          []string{},
+		MinScoreLabel:       "",
+		MinScoreLabels:      []string{},
+		MaxPostsPerCycle:    0,
+		PostIntervalMinutes: 0,
 	}
 }
 
