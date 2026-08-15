@@ -5,12 +5,17 @@
 		src,
 		content,
 		alt = '',
-		class: className = ''
+		class: className = '',
+		loading = 'lazy'
 	}: {
 		src?: string | null;
 		content?: string | null;
 		alt?: string;
 		class?: string;
+		// Images below the fold default to lazy loading; set `loading="eager"`
+		// for the above-the-fold hero/featured image so it paints immediately
+		// and stays crawlable without scroll-triggered fetching.
+		loading?: 'lazy' | 'eager';
 	} = $props();
 
 	// Computed array of image source candidates
@@ -51,7 +56,7 @@
 </script>
 
 {#if activeSrc}
-	<img src={activeSrc} {alt} class={className} onerror={handleError} />
+	<img src={activeSrc} {alt} {loading} decoding="async" class={className} onerror={handleError} />
 {:else}
 	<!-- Subtle cybernetic placeholder graphic -->
 	<div
