@@ -136,13 +136,28 @@ func xmlEscape(s string) string {
 	return replacer.Replace(s)
 }
 
-// handleRobotsTXT serves robots.txt with the admin area disallowed and the
-// sitemap location derived from the request host so it is always correct.
+// handleRobotsTXT serves robots.txt with a single consolidated block:
+// crawling is allowed, the admin area is disallowed, AI-training crawlers
+// are blocked, and the sitemap location is derived from the request host.
+//
+// NOTE: if Cloudflare "Managed robots.txt" is enabled it prepends its own
+// block above this one, producing two User-agent: * groups. To keep a
+// single block, disable that setting (Bots -> Managed robots.txt -> Off).
 func (s *Server) handleRobotsTXT(w http.ResponseWriter, r *http.Request) {
 	origin := s.sitemapOrigin(r)
 	body := "# allow crawling everywhere except the admin panel\n" +
 		"User-agent: *\n" +
-		"Disallow: /admin\n\n" +
+		"Disallow: /admin\n" +
+		"Allow: /\n\n" +
+		"# Block AI training / scraping crawlers\n" +
+		"User-agent: Amazonbot\nDisallow: /\n" +
+		"User-agent: Applebot-Extended\nDisallow: /\n" +
+		"User-agent: Bytespider\nDisallow: /\n" +
+		"User-agent: CCBot\nDisallow: /\n" +
+		"User-agent: ClaudeBot\nDisallow: /\n" +
+		"User-agent: GPTBot\nDisallow: /\n" +
+		"User-agent: Google-Extended\nDisallow: /\n" +
+		"User-agent: meta-externalagent\nDisallow: /\n\n" +
 		"Sitemap: " + origin + "/sitemap.xml\n"
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
