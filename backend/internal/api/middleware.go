@@ -213,11 +213,11 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
 		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		h.Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self' 'unsafe-inline'; "+
+			"default-src 'self'; script-src 'self' 'unsafe-inline' https://static.cloudflareinsights.com; "+
 				"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "+
 				"img-src 'self' data: https: http:; "+
 				"font-src 'self' data: https://fonts.gstatic.com; "+
-				"connect-src 'self'; frame-ancestors 'none'; base-uri 'self'")
+				"connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
