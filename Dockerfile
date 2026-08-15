@@ -70,6 +70,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENV STATIC_DIR=/app/static \
     DB_PATH=/app/data/neuralwire.db \
+    UPLOAD_DIR=/app/data/uploads \
     PORT=8080
 
 EXPOSE 8080

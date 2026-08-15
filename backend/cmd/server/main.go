@@ -150,6 +150,7 @@ func main() {
 		Logger:             logger,
 		Slog:               slogLogger,
 		StaticDir:          cfg.StaticDir,
+		UploadDir:          cfg.UploadDir,
 	})
 
 	// Auto fetch/publish scheduler (STY-57): reads its config from

@@ -4,6 +4,7 @@
 	import type { PageData } from './$types';
 	import Image from '$lib/Image.svelte';
 	import { BASE_URL } from '$lib/api';
+	import { absoluteUrl } from '$lib/siteUrl';
 
 	let { data }: { data: PageData } = $props();
 
@@ -19,6 +20,68 @@
 	let editContent = $state('');
 	let editImageURL = $state('');
 	let isSaving = $state(false);
+
+	// Image upload states (STY-59)
+	let isUploading = $state(false);
+	let uploadError = $state('');
+
+	const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5 MiB, mirrors backend limit
+
+	async function handleUploadImage(e: Event) {
+		const input = e.target as HTMLInputElement;
+		const file = input.files?.[0];
+		if (!file) return;
+
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+
+		// Client-side validation mirrors the backend (jpeg/png/webp/gif, <=5MiB)
+		if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+			uploadError = 'Unsupported image type. Use JPEG, PNG, WebP, or GIF.';
+			input.value = '';
+			return;
+		}
+		if (file.size > MAX_UPLOAD_BYTES) {
+			uploadError = 'File too large. Maximum upload size is 5 MiB.';
+			input.value = '';
+			return;
+		}
+
+		isUploading = true;
+		uploadError = '';
+		try {
+			const formData = new FormData();
+			formData.append('image', file);
+			const res = await fetch(`${BASE_URL}/admin/upload-image`, {
+				method: 'POST',
+				headers: { Authorization: `Bearer ${token}` },
+				body: formData
+			});
+
+			if (res.ok) {
+				const data = await res.json();
+				if (data.url) {
+					editImageURL = absoluteUrl(data.url);
+				} else {
+					uploadError = 'Upload succeeded but returned no URL.';
+				}
+			} else {
+				if (res.status === 401 || res.status === 403) {
+					localStorage.removeItem('admin_token');
+					window.location.reload();
+					return;
+				}
+				const data = await res.json().catch(() => ({}));
+				uploadError = data.error || 'Image upload failed.';
+			}
+		} catch (err) {
+			console.error('Image upload failed:', err);
+			uploadError = 'Failed to communicate with the upload server.';
+		} finally {
+			isUploading = false;
+			input.value = '';
+		}
+	}
 
 	async function fetchArticleDetails() {
 		isLoading = true;
@@ -466,6 +529,36 @@
 						class="mb-3 w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/60 px-3 py-2 font-sans text-xs text-white transition-colors focus:border-[#22D3EE] focus:outline-none"
 						placeholder="Paste cover image link..."
 					/>
+					<!-- Upload controls -->
+					<div class="mb-3 flex flex-wrap items-center gap-3">
+						<input
+							type="file"
+							id="cover-image-upload"
+							accept="image/*"
+							class="hidden"
+							onchange={handleUploadImage}
+						/>
+						<label
+							for="cover-image-upload"
+							class="cursor-pointer rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-4 py-2 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white"
+						>
+							{isUploading ? 'Uploading...' : 'Upload Image'}
+						</label>
+						<span class="font-mono text-[10px] text-slate-500"
+							>JPEG, PNG, WebP, GIF · max 5 MiB</span
+						>
+					</div>
+					{#if isUploading}
+						<div class="mb-3 flex items-center gap-2 font-mono text-[10px] text-[#22D3EE]">
+							<div
+								class="h-3 w-3 animate-spin rounded-full border-2 border-slate-800 border-t-[#22D3EE]"
+							></div>
+							UPLOADING IMAGE...
+						</div>
+					{/if}
+					{#if uploadError}
+						<div class="mb-3 font-mono text-[10px] text-[#E11D48]">{uploadError}</div>
+					{/if}
 					<div class="relative aspect-[16/9] w-full overflow-hidden rounded-lg bg-[#0F172A]">
 						<img
 							src={editImageURL}

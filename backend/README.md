@@ -68,6 +68,10 @@ English by default).
   plus a multi-stage `Dockerfile` and `docker-compose.yml` that build the
   frontend, compile the backend, and run both from one minimal non-root
   container with a health check
+- **Admin image uploads**: `POST /api/admin/upload-image` accepts an image
+  (jpeg/png/webp/gif, ≤ 5 MiB), stores it under `UPLOAD_DIR` with a random
+  name, and serves it at `/uploads/...`. In the Docker image `UPLOAD_DIR`
+  points at the persistent volume so uploaded images survive redeploys
 
 ## Requirements
 
