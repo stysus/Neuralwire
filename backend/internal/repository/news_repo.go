@@ -202,6 +202,51 @@ func (r *NewsRepository) ListAdmin(status, category, valueLabel string, page, pa
 	return news, total, nil
 }
 
+// AutoPublishCandidates returns draft articles that are eligible for
+// auto-publishing under the given filters: an optional category whitelist
+// (empty = all) and an optional minimum value label ("" = any). Results are
+// newest first, capped at limit.
+func (r *NewsRepository) AutoPublishCandidates(categories []string, minLabel string, limit int) ([]models.News, error) {
+	where := "WHERE status = ?"
+	args := []any{string(models.StatusDraft)}
+	if len(categories) > 0 {
+		placeholders := make([]string, len(categories))
+		for i, c := range categories {
+			placeholders[i] = "?"
+			args = append(args, c)
+		}
+		where += " AND category IN (" + strings.Join(placeholders, ",") + ")"
+	}
+	if minLabel != "" {
+		// value_label stores LOW/MEDIUM/HIGH (upper). Compare case-insensitively.
+		where += " AND LOWER(value_label) >= LOWER(?)"
+		args = append(args, minLabel)
+	}
+
+	query := `SELECT ` + newsColumns + ` FROM news ` + where +
+		` ORDER BY created_at DESC, id DESC LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("auto publish candidates: %w", err)
+	}
+	defer rows.Close()
+
+	var news []models.News
+	for rows.Next() {
+		n, err := scanNews(rows)
+		if err != nil {
+			return nil, err
+		}
+		news = append(news, *n)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate auto publish candidates: %w", err)
+	}
+	return news, nil
+}
+
 // SetStatus transitions an article to the given status. When publishing,
 // published_at is set to now unless it is already set.
 func (r *NewsRepository) SetStatus(id int64, status models.NewsStatus) error {

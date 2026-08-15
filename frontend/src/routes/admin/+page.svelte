@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import FetchProgress from '$lib/FetchProgress.svelte';
-	import { BASE_URL } from '$lib/api';
+	import { BASE_URL, getCategories } from '$lib/api';
+	import type { Category } from '$lib/mockData';
 
 	let draftsCount = $state(0);
 	let publishedCount = $state(0);
@@ -17,7 +18,7 @@
 	let lastFetchInfo = $state<{ time: string; result: string } | null>(null);
 
 	// Toast notification shown when a fetch cycle finishes.
-	let toast = $state<{ type: 'success' | 'error'; message: string } | null>(null);
+	let toast = $state<{ type: 'success' | 'error'; title: string; message: string } | null>(null);
 	let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
 	// Scoring thresholds (admin-configurable, backend persisted).
@@ -72,12 +73,145 @@
 		}
 	}
 
-	function showToast(type: 'success' | 'error', message: string) {
-		toast = { type, message };
+	function showToast(type: 'success' | 'error', message: string, title?: string) {
+		toast = {
+			type,
+			message,
+			title: title ?? (type === 'success' ? 'Fetch Complete' : 'Fetch Failed')
+		};
 		if (toastTimer) clearTimeout(toastTimer);
 		toastTimer = setTimeout(() => {
 			toast = null;
 		}, 6000);
+	}
+
+	// Auto Fetch & Auto Post scheduler config (STY-57). Category values are
+	// slugs, matching what the scheduler compares against news.category.
+	const INTERVAL_OPTIONS = [
+		{ value: 5, label: '5 minutes' },
+		{ value: 30, label: '30 minutes' },
+		{ value: 60, label: '1 hour' },
+		{ value: 360, label: '6 hours' },
+		{ value: 720, label: '12 hours' },
+		{ value: 1440, label: '24 hours' }
+	];
+	let categoriesList = $state<Category[]>([]);
+	let autoConfig = $state({
+		enabled: false,
+		auto_post_enabled: false,
+		interval_minutes: 360,
+		categories: [] as string[],
+		min_score_label: '' as 'low' | 'medium' | 'high' | ''
+	});
+	let autoConfigLoading = $state(false);
+	let autoConfigSaving = $state(false);
+	let autoConfigSaved = $state(false);
+	let autoConfigError = $state('');
+
+	function toggleCategory(slug: string) {
+		if (autoConfig.categories.includes(slug)) {
+			autoConfig.categories = autoConfig.categories.filter((s) => s !== slug);
+		} else {
+			autoConfig.categories = [...autoConfig.categories, slug];
+		}
+	}
+
+	function selectAllCategories() {
+		autoConfig.categories = categoriesList.map((c) => c.slug);
+	}
+
+	function clearCategories() {
+		autoConfig.categories = [];
+	}
+
+	async function loadAutoConfig() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+		autoConfigLoading = true;
+		autoConfigError = '';
+		try {
+			const [res, cats] = await Promise.all([
+				fetch(`${BASE_URL}/admin/autopublish`, {
+					headers: { Authorization: `Bearer ${token}` }
+				}),
+				getCategories()
+			]);
+			categoriesList = cats;
+			if (res.ok) {
+				const data = await res.json();
+				autoConfig.enabled = !!data.enabled;
+				autoConfig.auto_post_enabled = !!data.auto_post_enabled;
+				autoConfig.interval_minutes =
+					Number(data.interval_minutes) > 0 ? Number(data.interval_minutes) : 360;
+				autoConfig.categories = Array.isArray(data.categories) ? data.categories : [];
+				autoConfig.min_score_label = ['low', 'medium', 'high'].includes(data.min_score_label)
+					? data.min_score_label
+					: '';
+			} else {
+				if (res.status === 401 || res.status === 403) {
+					localStorage.removeItem('admin_token');
+					window.location.reload();
+					return;
+				}
+				autoConfigError = 'Failed to load auto publish config from the backend.';
+			}
+		} catch (e) {
+			console.warn('load autopublish config failed', e);
+			autoConfigError = 'Failed to load auto publish config from the backend.';
+		} finally {
+			autoConfigLoading = false;
+		}
+	}
+
+	async function saveAutoConfig() {
+		const token = localStorage.getItem('admin_token');
+		if (!token) return;
+		autoConfigSaving = true;
+		autoConfigSaved = false;
+		try {
+			const res = await fetch(`${BASE_URL}/admin/autopublish`, {
+				method: 'PUT',
+				headers: {
+					Authorization: `Bearer ${token}`,
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({
+					enabled: autoConfig.enabled,
+					auto_post_enabled: autoConfig.auto_post_enabled,
+					interval_minutes: Number(autoConfig.interval_minutes) || 360,
+					categories: autoConfig.categories,
+					min_score_label: autoConfig.min_score_label
+				})
+			});
+			if (res.ok) {
+				const data = await res.json();
+				if (data) {
+					autoConfig.enabled = !!data.enabled;
+					autoConfig.auto_post_enabled = !!data.auto_post_enabled;
+					autoConfig.interval_minutes =
+						Number(data.interval_minutes) > 0 ? Number(data.interval_minutes) : 360;
+					autoConfig.categories = Array.isArray(data.categories) ? data.categories : [];
+					autoConfig.min_score_label = ['low', 'medium', 'high'].includes(data.min_score_label)
+						? data.min_score_label
+						: '';
+				}
+				autoConfigSaved = true;
+				showToast('success', 'Auto fetch / auto post config saved.', 'Config Saved');
+				setTimeout(() => (autoConfigSaved = false), 3000);
+			} else {
+				if (res.status === 401 || res.status === 403) {
+					localStorage.removeItem('admin_token');
+					window.location.reload();
+					return;
+				}
+				showToast('error', 'Failed to save auto publish config.', 'Save Failed');
+			}
+		} catch (e) {
+			console.error('save autopublish config failed', e);
+			showToast('error', 'Failed to save auto publish config.', 'Save Failed');
+		} finally {
+			autoConfigSaving = false;
+		}
 	}
 
 	function loadLastFetch() {
@@ -194,6 +328,7 @@
 		fetchStats();
 		loadLastFetch();
 		loadSettings();
+		loadAutoConfig();
 		serverTime = new Date().toISOString();
 
 		// Update time telemetry
@@ -226,7 +361,7 @@
 				class="font-bold tracking-widest uppercase"
 				style="color: {toast.type === 'success' ? '#22D3EE' : '#E11D48'};"
 			>
-				{toast.type === 'success' ? 'Fetch Complete' : 'Fetch Failed'}
+				{toast.title}
 			</div>
 			<div class="leading-relaxed text-slate-300">{toast.message}</div>
 		</div>
@@ -468,6 +603,195 @@
 					<span class="text-slate-400">»</span>
 				</a>
 			</div>
+		</div>
+
+		<!-- Auto Fetch & Auto Post Scheduler -->
+		<div
+			class="rounded-2xl border border-[rgba(255,255,255,0.08)] bg-[#0F172A]/10 p-6 font-mono text-xs"
+		>
+			<div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+				<span class="tracking-wider text-slate-500 uppercase">
+					Auto Fetch & Auto Post Pipeline
+				</span>
+				{#if autoConfigSaved}
+					<span class="text-[#22D3EE]">SAVED ✓</span>
+				{/if}
+			</div>
+
+			{#if autoConfigLoading}
+				<div class="animate-pulse tracking-widest text-slate-500 uppercase">
+					Syncing Scheduler Config...
+				</div>
+			{:else}
+				{#if autoConfigError}
+					<div class="mb-4 text-[10px] text-[#E11D48]">{autoConfigError}</div>
+				{/if}
+
+				<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+					<!-- Toggles + Interval -->
+					<div class="space-y-5">
+						<!-- Auto Fetch toggle -->
+						<div class="flex items-center justify-between gap-4">
+							<div>
+								<div class="text-white">Auto Fetch</div>
+								<div class="mt-0.5 text-[10px] text-slate-500">
+									Run the scheduled RSS fetch cycle. When off, no fetch runs automatically.
+								</div>
+							</div>
+							<button
+								type="button"
+								role="switch"
+								aria-checked={autoConfig.enabled}
+								aria-label="Toggle auto fetch"
+								onclick={() => (autoConfig.enabled = !autoConfig.enabled)}
+								class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full border transition-colors {autoConfig.enabled
+									? 'border-[#22D3EE]/50 bg-[#22D3EE]/20'
+									: 'border-[rgba(255,255,255,0.15)] bg-[#070A10]'}"
+							>
+								<span
+									class="inline-block h-4 w-4 transform rounded-full transition-transform duration-200 {autoConfig.enabled
+										? 'translate-x-6 bg-[#22D3EE]'
+										: 'translate-x-1 bg-slate-500'}"
+								></span>
+							</button>
+						</div>
+
+						<!-- Auto Post toggle -->
+						<div class="flex items-center justify-between gap-4">
+							<div>
+								<div class="text-white">Auto Post</div>
+								<div class="mt-0.5 text-[10px] text-slate-500">
+									Auto-publish qualifying drafts (score + category filters). When off, the scheduler
+									only fetches into the draft buffer.
+								</div>
+							</div>
+							<button
+								type="button"
+								role="switch"
+								aria-checked={autoConfig.auto_post_enabled}
+								aria-label="Toggle auto post"
+								onclick={() => (autoConfig.auto_post_enabled = !autoConfig.auto_post_enabled)}
+								class="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer items-center rounded-full border transition-colors {autoConfig.auto_post_enabled
+									? 'border-[#22D3EE]/50 bg-[#22D3EE]/20'
+									: 'border-[rgba(255,255,255,0.15)] bg-[#070A10]'}"
+							>
+								<span
+									class="inline-block h-4 w-4 transform rounded-full transition-transform duration-200 {autoConfig.auto_post_enabled
+										? 'translate-x-6 bg-[#22D3EE]'
+										: 'translate-x-1 bg-slate-500'}"
+								></span>
+							</button>
+						</div>
+
+						<!-- Interval -->
+						<label class="block">
+							<span class="mb-1 block text-[10px] text-slate-500 uppercase">Interval</span>
+							<select
+								bind:value={autoConfig.interval_minutes}
+								class="w-full cursor-pointer rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
+							>
+								{#each INTERVAL_OPTIONS as opt}
+									<option value={opt.value}>{opt.label}</option>
+								{/each}
+								{#if !INTERVAL_OPTIONS.some((o) => o.value === autoConfig.interval_minutes)}
+									<option value={autoConfig.interval_minutes}>
+										{autoConfig.interval_minutes} minutes
+									</option>
+								{/if}
+							</select>
+						</label>
+					</div>
+
+					<!-- Filters -->
+					<div class="space-y-5">
+						<!-- Min score -->
+						<label class="block">
+							<span class="mb-1 block text-[10px] text-slate-500 uppercase">
+								Minimum Score Filter
+							</span>
+							<select
+								bind:value={autoConfig.min_score_label}
+								class="w-full cursor-pointer rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
+							>
+								<option value="">None (all scores)</option>
+								<option value="low">Low</option>
+								<option value="medium">Medium</option>
+								<option value="high">High</option>
+							</select>
+						</label>
+
+						<!-- Category filter -->
+						<div>
+							<div class="mb-2 flex items-center justify-between gap-2">
+								<span class="text-[10px] text-slate-500 uppercase">Category Filter</span>
+								<div class="flex items-center gap-3">
+									{#if autoConfig.categories.length > 0}
+										<button
+											onclick={clearCategories}
+											class="cursor-pointer text-[10px] text-slate-500 transition-colors hover:text-[#22D3EE]"
+										>
+											CLEAR
+										</button>
+										<button
+											onclick={selectAllCategories}
+											class="cursor-pointer text-[10px] text-slate-500 transition-colors hover:text-[#22D3EE]"
+										>
+											ALL
+										</button>
+									{:else}
+										<span class="text-[10px] text-[#22D3EE]/80">ALL CATEGORIES (NO FILTER)</span>
+									{/if}
+								</div>
+							</div>
+							{#if categoriesList.length === 0}
+								<div class="text-[10px] text-slate-600">Loading categories...</div>
+							{:else}
+								<div class="grid max-h-48 grid-cols-1 gap-1 overflow-y-auto sm:grid-cols-2">
+									{#each categoriesList as cat (cat.slug)}
+										<label
+											class="flex cursor-pointer items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.06)] px-3 py-2 transition-colors hover:border-[#22D3EE]/30 hover:bg-[#22D3EE]/5 {autoConfig.categories.includes(
+												cat.slug
+											)
+												? 'border-[#22D3EE]/40 bg-[#22D3EE]/10'
+												: ''}"
+										>
+											<input
+												type="checkbox"
+												checked={autoConfig.categories.includes(cat.slug)}
+												onchange={() => toggleCategory(cat.slug)}
+												class="h-3.5 w-3.5 cursor-pointer accent-[#22D3EE]"
+											/>
+											<span
+												class="text-[11px] {autoConfig.categories.includes(cat.slug)
+													? 'text-[#22D3EE]'
+													: 'text-slate-300'}"
+											>
+												{cat.name}
+											</span>
+										</label>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					</div>
+				</div>
+
+				<div
+					class="mt-6 flex items-center justify-between gap-3 border-t border-[rgba(255,255,255,0.04)] pt-4"
+				>
+					<span class="text-[10px] text-slate-600">
+						Auto Post publishes drafts that pass the category + score filters. Empty category filter
+						and "None" score filter disable those constraints.
+					</span>
+					<button
+						onclick={saveAutoConfig}
+						disabled={autoConfigSaving}
+						class="cursor-pointer rounded-lg border border-[#22D3EE]/30 bg-[#22D3EE]/5 px-4 py-1.5 font-mono text-xs text-[#22D3EE] transition-all hover:border-[#22D3EE] hover:bg-[#22D3EE]/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						{autoConfigSaving ? 'Saving...' : 'Save Config'}
+					</button>
+				</div>
+			{/if}
 		</div>
 
 		<!-- Scoring Thresholds Settings -->

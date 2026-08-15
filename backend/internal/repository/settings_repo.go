@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -96,6 +97,41 @@ func (r *SettingsRepository) SetScoreThresholds(t models.ScoreThresholds) error 
 		); err != nil {
 			return fmt.Errorf("upsert setting %s: %w", k, err)
 		}
+	}
+	return nil
+}
+
+const autoPublishKey = "auto_publish_config"
+
+// GetAutoPublishConfig loads the auto fetch/publish scheduler settings from
+// app_settings, falling back to defaults when missing or invalid.
+func (r *SettingsRepository) GetAutoPublishConfig() models.AutoPublishConfig {
+	def := models.DefaultAutoPublishConfig()
+	var raw string
+	err := r.db.QueryRow(`SELECT value FROM app_settings WHERE key = ?`, autoPublishKey).Scan(&raw)
+	if err != nil || raw == "" {
+		return def
+	}
+	var cfg models.AutoPublishConfig
+	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
+		return def
+	}
+	return cfg
+}
+
+// SetAutoPublishConfig persists the scheduler configuration as JSON.
+func (r *SettingsRepository) SetAutoPublishConfig(cfg models.AutoPublishConfig) error {
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshal auto publish config: %w", err)
+	}
+	if _, err := r.db.Exec(`
+		INSERT INTO app_settings (key, value, updated_at)
+		VALUES (?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+		autoPublishKey, string(raw),
+	); err != nil {
+		return fmt.Errorf("upsert auto publish config: %w", err)
 	}
 	return nil
 }

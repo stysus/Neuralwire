@@ -21,7 +21,9 @@ import (
 	"neuralwire/backend/internal/database"
 	"neuralwire/backend/internal/fetcher"
 	"neuralwire/backend/internal/metrics"
+	"neuralwire/backend/internal/models"
 	"neuralwire/backend/internal/repository"
+	"neuralwire/backend/internal/scheduler"
 	"neuralwire/backend/internal/scoring"
 	"neuralwire/backend/internal/scraper"
 )
@@ -149,6 +151,34 @@ func main() {
 		Slog:               slogLogger,
 		StaticDir:          cfg.StaticDir,
 	})
+
+	// Auto fetch/publish scheduler (STY-57): reads its config from
+	// app_settings (editable via the admin panel). Disabled by default.
+	sched := scheduler.New(settingsRepo, scheduler.Job{
+		Fetch: func(ctx context.Context) (fetcher.FetchStats, error) {
+			return rssFetcher.FetchAll(ctx)
+		},
+		AutoPost: func(ctx context.Context, cfg models.AutoPublishConfig) (int, error) {
+			// Publish eligible drafts: category whitelist + minimum score label.
+			candidates, err := newsRepo.AutoPublishCandidates(cfg.Categories, cfg.MinScoreLabel, 50)
+			if err != nil {
+				return 0, err
+			}
+			published := 0
+			for _, n := range candidates {
+				if err := newsRepo.SetStatus(n.ID, models.StatusPublished); err != nil {
+					slogLogger.Error("scheduler: auto publish failed", "id", n.ID, "error", err)
+					continue
+				}
+				published++
+				slogLogger.Info("scheduler: auto published",
+					"id", n.ID, "title", n.Title, "label", n.ValueLabel)
+			}
+			return published, nil
+		},
+	}, slogLogger)
+	sched.Start()
+	defer sched.Stop()
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

@@ -207,6 +207,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /api/admin/fetch/progress", s.requireAuth(http.HandlerFunc(s.handleFetchProgress)))
 	mux.Handle("GET /api/admin/settings", s.requireAuth(http.HandlerFunc(s.handleGetSettings)))
 	mux.Handle("PUT /api/admin/settings", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUpdateSettings))))
+	mux.Handle("GET /api/admin/autopublish", s.requireAuth(http.HandlerFunc(s.handleGetAutoPublish)))
+	mux.Handle("PUT /api/admin/autopublish", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUpdateAutoPublish))))
 	mux.Handle("/api/admin/", s.requireAuth(s.csrfProtect(admin)))
 
 	// Serve the built frontend when a static directory is configured. The
