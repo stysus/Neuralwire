@@ -223,6 +223,7 @@
 								src={featuredArticle.image_url}
 								content={featuredArticle.content}
 								alt={featuredArticle.title}
+								loading="eager"
 								class="h-full w-full object-cover opacity-90 transition-all duration-700 group-hover:opacity-100"
 							/>
 							<div

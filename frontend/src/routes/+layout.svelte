@@ -59,6 +59,14 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
+	<!-- Preconnect to the most-used article image hosts (from live DB data) so
+		 feed/hero images start downloading sooner. -->
+	<link rel="preconnect" href="https://storage.googleapis.com" />
+	<link rel="preconnect" href="https://d2908q01vomqb2.cloudfront.net" />
+	<link rel="preconnect" href="https://lh3.googleusercontent.com" />
+	<link rel="preconnect" href="https://news.mit.edu" />
+	<link rel="preconnect" href="https://images.ctfassets.net" />
+	<link rel="preconnect" href="https://images.unsplash.com" />
 	<!-- Primary SEO Meta Tags (page-level heads override with page-specific tags) -->
 	<title>Neuralwire | AI News, Neural Networks & Future Computation</title>
 	<meta

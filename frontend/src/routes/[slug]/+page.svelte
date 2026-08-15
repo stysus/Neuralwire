@@ -290,6 +290,7 @@
 				src={article.image_url}
 				content={article.content}
 				alt={article.title}
+				loading="eager"
 				class="h-full w-full object-cover opacity-90"
 			/>
 			<div
