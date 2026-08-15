@@ -53,6 +53,40 @@ type News struct {
 	ViewCount int `json:"view_count"`
 }
 
+// AutoPublishConfig controls the scheduled auto-fetch and auto-publish
+// pipeline. It is stored in app_settings as JSON and editable from the admin
+// panel (STY-57).
+type AutoPublishConfig struct {
+	// Enabled turns the scheduler on/off. When false no fetch or publish
+	// runs automatically.
+	Enabled bool `json:"enabled"`
+	// AutoPostEnabled additionally publishes qualifying drafts (score +
+	// category filter). When false, the scheduler only fetches (creates
+	// drafts) without publishing anything.
+	AutoPostEnabled bool `json:"auto_post_enabled"`
+	// IntervalMinutes is how often the scheduler runs. 0 falls back to 360
+	// (6 hours).
+	IntervalMinutes int `json:"interval_minutes"`
+	// Categories is the whitelist of category names to auto-post. Empty
+	// means all categories are eligible.
+	Categories []string `json:"categories"`
+	// MinScoreLabel is the minimum value label ("high", "medium", "low") an
+	// article must have to be auto-published. Empty means no score filter.
+	MinScoreLabel string `json:"min_score_label"`
+}
+
+// DefaultAutoPublishConfig returns the out-of-the-box scheduler settings:
+// disabled by default, 6-hour interval, no filters.
+func DefaultAutoPublishConfig() AutoPublishConfig {
+	return AutoPublishConfig{
+		Enabled:         false,
+		AutoPostEnabled: false,
+		IntervalMinutes: 360,
+		Categories:      []string{},
+		MinScoreLabel:   "",
+	}
+}
+
 // ScoreThresholds are the configurable bounds for the HIGH/MEDIUM/LOW
 // advisory labels. Stored in app_settings so admins can tune them without a
 // redeploy.

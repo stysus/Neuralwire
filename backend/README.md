@@ -125,7 +125,7 @@ reviewable drafts.
 
 ## How ingestion works (curator model)
 
-There is **no background scheduler** — fetching only happens when an
+By default there is **no background scheduler** — fetching only happens when an
 authenticated admin calls `POST /api/admin/fetch`, which runs one fetch cycle
 across all sources and returns per-source statistics:
 
@@ -141,6 +141,33 @@ across all sources and returns per-source statistics:
   ]
 }
 ```
+
+### Auto fetch & auto publish (optional scheduler)
+
+By default fetching is manual (see above). An optional scheduler can fetch on
+a timer and optionally auto-publish qualifying drafts. It is configured via
+`GET/PUT /api/admin/autopublish` (admin panel UI on the frontend):
+
+```json
+{
+  "enabled": true,
+  "auto_post_enabled": true,
+  "interval_minutes": 360,
+  "categories": ["ai"],
+  "min_score_label": "high"
+}
+```
+
+- `enabled` — turn the scheduler on/off.
+- `auto_post_enabled` — additionally publish drafts that pass the filters.
+  When false, the scheduler only fetches (creates drafts for admin review).
+- `interval_minutes` — how often a cycle runs (minimum 5, default 360 = 6h).
+- `categories` — whitelist of categories eligible for auto-publish; empty = all.
+- `min_score_label` — minimum value label (`low`/`medium`/`high`) to
+  auto-publish; empty = any.
+
+The scheduler never publishes outside the filters; everything else stays a
+draft for admin review, preserving the curator model.
 
 RSS feeds only expose short excerpts, so each new article goes through a
 hybrid extraction:

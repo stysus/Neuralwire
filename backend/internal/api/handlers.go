@@ -594,6 +594,43 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetScoreThresholds())
 }
 
+// handleGetAutoPublish returns the auto fetch/publish scheduler config.
+func (s *Server) handleGetAutoPublish(w http.ResponseWriter, r *http.Request) {
+	if s.settingsRepo == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "settings repository is not configured")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetAutoPublishConfig())
+}
+
+// handleUpdateAutoPublish persists the auto fetch/publish scheduler config.
+// It is editable from the admin panel; the scheduler picks changes up on its
+// next cycle.
+func (s *Server) handleUpdateAutoPublish(w http.ResponseWriter, r *http.Request) {
+	if s.settingsRepo == nil {
+		s.writeError(w, http.StatusServiceUnavailable, "settings repository is not configured")
+		return
+	}
+	var req models.AutoPublishConfig
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	// Sanity clamps.
+	if req.IntervalMinutes <= 0 {
+		req.IntervalMinutes = models.DefaultAutoPublishConfig().IntervalMinutes
+	}
+	if req.IntervalMinutes < 5 {
+		req.IntervalMinutes = 5
+	}
+	if err := s.settingsRepo.SetAutoPublishConfig(req); err != nil {
+		s.logger.Printf("api: update auto publish config: %v", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to update auto publish config")
+		return
+	}
+	s.writeJSON(w, http.StatusOK, s.settingsRepo.GetAutoPublishConfig())
+}
+
 type createNewsRequest struct {
 	Title    string `json:"title"`
 	URL      string `json:"url"`
