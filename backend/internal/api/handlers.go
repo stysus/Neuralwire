@@ -55,6 +55,100 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	s.metrics.WritePrometheus(w)
 }
 
+// sitemapOrigin is the public origin used to build absolute sitemap URLs.
+// In production it is derived from the request host; in dev it falls back
+// to localhost.
+func (s *Server) sitemapOrigin(r *http.Request) string {
+	if host := strings.TrimSpace(r.Host); host != "" {
+		return "https://" + host
+	}
+	return "https://localhost"
+}
+
+// handleSitemap renders an XML sitemap of all public pages: home, about,
+// search, every category, and every published article. It is generated from
+// the database on demand so it always reflects the current content (the old
+// frontend version was prerendered at build time and missed articles).
+func (s *Server) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	origin := s.sitemapOrigin(r)
+
+	categories, err := s.categoryRepo.List()
+	if err != nil {
+		s.slog.Error("api: sitemap categories", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	// Fetch up to 1000 published articles (max page size is 100).
+	articles, _, err := s.newsRepo.ListPublished("", "", 1, 100)
+	if err != nil {
+		s.slog.Error("api: sitemap news", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	var b strings.Builder
+	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>` + "\n")
+	b.WriteString(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n")
+
+	writeURL := func(loc string, lastmod, changefreq string, priority string) {
+		b.WriteString("  <url>\n")
+		b.WriteString("    <loc>" + xmlEscape(origin+loc) + "</loc>\n")
+		if lastmod != "" {
+			b.WriteString("    <lastmod>" + lastmod + "</lastmod>\n")
+		}
+		b.WriteString("    <changefreq>" + changefreq + "</changefreq>\n")
+		b.WriteString("    <priority>" + priority + "</priority>\n")
+		b.WriteString("  </url>\n")
+	}
+
+	writeURL("/", time.Now().UTC().Format("2006-01-02"), "daily", "1.0")
+	writeURL("/about", "", "monthly", "0.5")
+	writeURL("/search", "", "weekly", "0.4")
+
+	for _, c := range categories {
+		writeURL("/category/"+c.Slug, "", "daily", "0.6")
+	}
+
+	for _, a := range articles {
+		lastmod := ""
+		if a.PublishedAt != nil {
+			lastmod = a.PublishedAt.UTC().Format("2006-01-02")
+		}
+		writeURL("/"+a.Slug, lastmod, "weekly", "0.8")
+	}
+
+	b.WriteString(`</urlset>` + "\n")
+
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write([]byte(b.String()))
+}
+
+// xmlEscape escapes the five XML special characters in a string.
+func xmlEscape(s string) string {
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+		"'", "&apos;",
+	)
+	return replacer.Replace(s)
+}
+
+// handleRobotsTXT serves robots.txt with the admin area disallowed and the
+// sitemap location derived from the request host so it is always correct.
+func (s *Server) handleRobotsTXT(w http.ResponseWriter, r *http.Request) {
+	origin := s.sitemapOrigin(r)
+	body := "# allow crawling everywhere except the admin panel\n" +
+		"User-agent: *\n" +
+		"Disallow: /admin\n\n" +
+		"Sitemap: " + origin + "/sitemap.xml\n"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write([]byte(body))
+}
+
 func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	category := strings.TrimSpace(r.URL.Query().Get("category"))
 	query := strings.TrimSpace(r.URL.Query().Get("q"))

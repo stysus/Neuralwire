@@ -54,13 +54,6 @@ You can preview the production build with `npm run preview`.
 
 ### 2026-08-14 — Sitemap + robots.txt + full SEO/OG meta tags (STY-44, STY-46)
 
-- Added a dynamic `sitemap.xml` endpoint (`src/routes/sitemap.xml/+server.ts`)
-  that lists the home, about, search, every category, and every published
-  article URL. Article `lastmod` comes from `published_at`/`created_at`; all
-  URLs are absolute via `PUBLIC_SITE_URL` (fallback: `http://localhost:5173`,
-  see `src/lib/siteUrl.ts`).
-- Converted `robots.txt` to a dynamic endpoint that blocks `/admin` and
-  advertises `Sitemap: <PUBLIC_SITE_URL>/sitemap.xml`.
 - SEO/meta completion:
   - `canonical` links on the home and article pages (plus category, search,
     about).
@@ -74,6 +67,13 @@ You can preview the production build with `npm run preview`.
   so the CI pipeline (check + lint + build) passes.
 - Verified with `npm run check` (0 errors, 0 warnings), `npm run lint` and
   `npm run build`.
+
+### 2026-08-15 — Removed frontend sitemap/robots routes (STY-52)
+
+- Deleted `src/routes/sitemap.xml/` and `src/routes/robots.txt/` — the Go
+  backend now generates `/sitemap.xml` and `/robots.txt` dynamically from the
+  database, so the prerendered frontend routes (which only ever contained 3
+  URLs at build time) were removed to avoid conflicts.
 
 ### 2026-08-14 — Full-color article images everywhere (STY-25)
 
