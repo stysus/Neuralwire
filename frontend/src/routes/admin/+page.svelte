@@ -95,13 +95,22 @@
 		{ value: 720, label: '12 hours' },
 		{ value: 1440, label: '24 hours' }
 	];
+	const POST_INTERVAL_OPTIONS = [{ value: 0, label: 'Same as fetch' }, ...INTERVAL_OPTIONS];
+	const SCORE_LABEL_OPTIONS = [
+		{ value: 'low', label: 'Low' },
+		{ value: 'medium', label: 'Medium' },
+		{ value: 'high', label: 'High' }
+	];
 	let categoriesList = $state<Category[]>([]);
 	let autoConfig = $state({
 		enabled: false,
 		auto_post_enabled: false,
 		interval_minutes: 360,
 		categories: [] as string[],
-		min_score_label: '' as 'low' | 'medium' | 'high' | ''
+		min_score_label: '' as 'low' | 'medium' | 'high' | '',
+		min_score_labels: [] as string[],
+		max_posts_per_cycle: 0,
+		post_interval_minutes: 0
 	});
 	let autoConfigLoading = $state(false);
 	let autoConfigSaving = $state(false);
@@ -126,6 +135,49 @@
 		autoConfig.categories = [];
 	}
 
+	function toggleScoreLabel(label: string) {
+		if (autoConfig.min_score_labels.includes(label)) {
+			autoConfig.min_score_labels = autoConfig.min_score_labels.filter((l) => l !== label);
+		} else {
+			autoConfig.min_score_labels = [...autoConfig.min_score_labels, label];
+		}
+	}
+
+	// Legacy mirror of the multi-select score filter: the least restrictive
+	// (lowest) checked tier, so old backends keep working. Empty when all
+	// scores are allowed.
+	function legacyScoreLabel(): string {
+		return (
+			['low', 'medium', 'high'].filter((l) => autoConfig.min_score_labels.includes(l))[0] ?? ''
+		);
+	}
+
+	// Applies the scheduler config fields from a backend response. Supports
+	// the STY-60 multi-score filter with a legacy min_score_label fallback.
+	function applyAutoConfig(data: Record<string, unknown>) {
+		autoConfig.enabled = !!data.enabled;
+		autoConfig.auto_post_enabled = !!data.auto_post_enabled;
+		autoConfig.interval_minutes =
+			Number(data.interval_minutes) > 0 ? Number(data.interval_minutes) : 360;
+		autoConfig.categories = Array.isArray(data.categories) ? data.categories : [];
+		const legacy = ['low', 'medium', 'high'].includes(data.min_score_label as string)
+			? (data.min_score_label as string)
+			: '';
+		const labels = Array.isArray(data.min_score_labels)
+			? (data.min_score_labels as string[]).filter((l) => ['low', 'medium', 'high'].includes(l))
+			: [];
+		autoConfig.min_score_label = legacy as 'low' | 'medium' | 'high' | '';
+		autoConfig.min_score_labels = labels.length > 0 ? labels : legacy ? [legacy] : [];
+		autoConfig.max_posts_per_cycle =
+			Number.isFinite(Number(data.max_posts_per_cycle)) && Number(data.max_posts_per_cycle) > 0
+				? Number(data.max_posts_per_cycle)
+				: 0;
+		autoConfig.post_interval_minutes =
+			Number.isFinite(Number(data.post_interval_minutes)) && Number(data.post_interval_minutes) > 0
+				? Number(data.post_interval_minutes)
+				: 0;
+	}
+
 	async function loadAutoConfig() {
 		const token = localStorage.getItem('admin_token');
 		if (!token) return;
@@ -141,14 +193,7 @@
 			categoriesList = cats;
 			if (res.ok) {
 				const data = await res.json();
-				autoConfig.enabled = !!data.enabled;
-				autoConfig.auto_post_enabled = !!data.auto_post_enabled;
-				autoConfig.interval_minutes =
-					Number(data.interval_minutes) > 0 ? Number(data.interval_minutes) : 360;
-				autoConfig.categories = Array.isArray(data.categories) ? data.categories : [];
-				autoConfig.min_score_label = ['low', 'medium', 'high'].includes(data.min_score_label)
-					? data.min_score_label
-					: '';
+				applyAutoConfig(data);
 				schedulerRunning = !!data.running;
 			} else {
 				if (res.status === 401 || res.status === 403) {
@@ -183,21 +228,15 @@
 					auto_post_enabled: autoConfig.auto_post_enabled,
 					interval_minutes: Number(autoConfig.interval_minutes) || 360,
 					categories: autoConfig.categories,
-					min_score_label: autoConfig.min_score_label
+					min_score_label: legacyScoreLabel(),
+					min_score_labels: autoConfig.min_score_labels,
+					max_posts_per_cycle: Math.max(0, Math.floor(Number(autoConfig.max_posts_per_cycle) || 0)),
+					post_interval_minutes: Math.max(0, Number(autoConfig.post_interval_minutes) || 0)
 				})
 			});
 			if (res.ok) {
 				const data = await res.json();
-				if (data) {
-					autoConfig.enabled = !!data.enabled;
-					autoConfig.auto_post_enabled = !!data.auto_post_enabled;
-					autoConfig.interval_minutes =
-						Number(data.interval_minutes) > 0 ? Number(data.interval_minutes) : 360;
-					autoConfig.categories = Array.isArray(data.categories) ? data.categories : [];
-					autoConfig.min_score_label = ['low', 'medium', 'high'].includes(data.min_score_label)
-						? data.min_score_label
-						: '';
-				}
+				if (data) applyAutoConfig(data);
 				autoConfigSaved = true;
 				showToast('success', 'Auto fetch / auto post config saved.', 'Config Saved');
 				setTimeout(() => (autoConfigSaved = false), 3000);
@@ -745,9 +784,9 @@
 							</button>
 						</div>
 
-						<!-- Interval -->
+						<!-- Fetch interval -->
 						<label class="block">
-							<span class="mb-1 block text-[10px] text-slate-500 uppercase">Interval</span>
+							<span class="mb-1 block text-[10px] text-slate-500 uppercase">Fetch Interval</span>
 							<select
 								bind:value={autoConfig.interval_minutes}
 								class="w-full cursor-pointer rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
@@ -762,24 +801,83 @@
 								{/if}
 							</select>
 						</label>
+
+						<!-- Post interval (independent of fetch) -->
+						<label class="block">
+							<span class="mb-1 block text-[10px] text-slate-500 uppercase">Post Interval</span>
+							<select
+								bind:value={autoConfig.post_interval_minutes}
+								class="w-full cursor-pointer rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
+							>
+								{#each POST_INTERVAL_OPTIONS as opt}
+									<option value={opt.value}>{opt.label}</option>
+								{/each}
+								{#if !POST_INTERVAL_OPTIONS.some((o) => o.value === autoConfig.post_interval_minutes)}
+									<option value={autoConfig.post_interval_minutes}>
+										{autoConfig.post_interval_minutes} minutes
+									</option>
+								{/if}
+							</select>
+						</label>
 					</div>
 
 					<!-- Filters -->
 					<div class="space-y-5">
-						<!-- Min score -->
+						<!-- Score filter (multi-select) -->
+						<div>
+							<div class="mb-2 flex items-center justify-between gap-2">
+								<span class="text-[10px] text-slate-500 uppercase">Score Filter</span>
+								{#if autoConfig.min_score_labels.length > 0}
+									<button
+										onclick={() => (autoConfig.min_score_labels = [])}
+										class="cursor-pointer text-[10px] text-slate-500 transition-colors hover:text-[#22D3EE]"
+									>
+										CLEAR
+									</button>
+								{:else}
+									<span class="text-[10px] text-[#22D3EE]/80">ALL SCORES (NO FILTER)</span>
+								{/if}
+							</div>
+							<div class="flex flex-wrap gap-1">
+								{#each SCORE_LABEL_OPTIONS as opt (opt.value)}
+									<label
+										class="flex cursor-pointer items-center gap-2 rounded-lg border border-[rgba(255,255,255,0.06)] px-3 py-2 transition-colors hover:border-[#22D3EE]/30 hover:bg-[#22D3EE]/5 {autoConfig.min_score_labels.includes(
+											opt.value
+										)
+											? 'border-[#22D3EE]/40 bg-[#22D3EE]/10'
+											: ''}"
+									>
+										<input
+											type="checkbox"
+											checked={autoConfig.min_score_labels.includes(opt.value)}
+											onchange={() => toggleScoreLabel(opt.value)}
+											class="h-3.5 w-3.5 cursor-pointer accent-[#22D3EE]"
+										/>
+										<span
+											class="text-[11px] {autoConfig.min_score_labels.includes(opt.value)
+												? 'text-[#22D3EE]'
+												: 'text-slate-300'}"
+										>
+											{opt.label}
+										</span>
+									</label>
+								{/each}
+							</div>
+						</div>
+
+						<!-- Max posts per cycle -->
 						<label class="block">
 							<span class="mb-1 block text-[10px] text-slate-500 uppercase">
-								Minimum Score Filter
+								Max posts per cycle (0 = unlimited)
 							</span>
-							<select
-								bind:value={autoConfig.min_score_label}
-								class="w-full cursor-pointer rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white focus:border-[#22D3EE]/50 focus:outline-none"
-							>
-								<option value="">None (all scores)</option>
-								<option value="low">Low</option>
-								<option value="medium">Medium</option>
-								<option value="high">High</option>
-							</select>
+							<input
+								type="number"
+								bind:value={autoConfig.max_posts_per_cycle}
+								min="0"
+								step="1"
+								placeholder="0 = unlimited"
+								class="w-full rounded-lg border border-[rgba(255,255,255,0.08)] bg-[#070A10] px-3 py-2 text-xs text-white placeholder:text-slate-600 focus:border-[#22D3EE]/50 focus:outline-none"
+							/>
 						</label>
 
 						<!-- Category filter -->
