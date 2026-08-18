@@ -57,13 +57,6 @@
 </script>
 
 <svelte:head>
-	<!-- Favicons (RealFaviconGenerator). SVG + PNG for modern browsers,
-		 .ico as fallback, apple-touch-icon for iOS home screen. -->
-	<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-	<link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
-	<link rel="shortcut icon" href="/favicon.ico" />
-	<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-	<link rel="manifest" href="/site.webmanifest" />
 	<!-- Preconnect to the most-used article image hosts (from live DB data) so
 		 feed/hero images start downloading sooner. -->
 	<link rel="preconnect" href="https://storage.googleapis.com" />
