@@ -3,6 +3,59 @@ import { mockCategories, type Category, type News } from './mockData';
 
 export const BASE_URL = (env.PUBLIC_API_URL?.trim() || '/api').replace(/\/+$/, '');
 
+// ---------------------------------------------------------------------------
+// Client-side API response cache (STY-96)
+// ---------------------------------------------------------------------------
+// Only successful responses (res.ok) are cached. Failed/fallback results are
+// never stored, so the next call retries the network.
+
+const API_CACHE_TTL = 60_000; // 60 s — tunable
+
+interface CacheEntry {
+	data: unknown;
+	expiresAt: number;
+}
+
+const apiCache = new Map<string, CacheEntry>();
+
+/** Fetch JSON, returning cached data when still valid. */
+async function fetchJsonCached<T>(
+	url: string,
+	f: typeof fetch,
+	signal?: AbortSignal
+): Promise<T | null> {
+	const now = Date.now();
+	const cached = apiCache.get(url);
+	if (cached && now < cached.expiresAt) return cached.data as T;
+
+	try {
+		const res = await f(url, { signal });
+		if (res.ok) {
+			const data = await res.json();
+			apiCache.set(url, { data, expiresAt: now + API_CACHE_TTL });
+			return data;
+		}
+	} catch {
+		// network / timeout — fall through to return null
+	}
+
+	return null;
+}
+
+/**
+ * Clear the API cache. If `pattern` is provided, only keys that include the
+ * substring are removed; otherwise the entire cache is flushed.
+ */
+export function clearCache(pattern?: string) {
+	if (!pattern) {
+		apiCache.clear();
+		return;
+	}
+	for (const key of [...apiCache.keys()]) {
+		if (key.includes(pattern)) apiCache.delete(key);
+	}
+}
+
 /**
  * Gets SvelteKit-compatible fetch or global fetch.
  */
@@ -15,15 +68,12 @@ function getFetch(customFetch?: typeof fetch): typeof fetch {
  */
 export async function getCategories(customFetch?: typeof fetch): Promise<Category[]> {
 	const f = getFetch(customFetch);
-	try {
-		const res = await f(`${BASE_URL}/categories`, { signal: AbortSignal.timeout(2000) });
-		if (res.ok) {
-			const data = await res.json();
-			return data && data.data && data.data.length > 0 ? data.data : mockCategories;
-		}
-	} catch (e) {
-		console.warn('Backend categories API unreachable, using mock categories.', e);
-	}
+	const data = await fetchJsonCached<{ data: Category[] }>(
+		`${BASE_URL}/categories`,
+		f,
+		AbortSignal.timeout(2000)
+	);
+	if (data?.data && data.data.length > 0) return data.data;
 	return mockCategories;
 }
 
@@ -36,7 +86,6 @@ export async function getNews(
 	searchQuery?: string
 ): Promise<News[]> {
 	const f = getFetch(customFetch);
-	let articles: News[] = [];
 
 	// Build query string. Search uses the backend ?q= endpoint, optionally combined
 	// with a category filter; otherwise fetch a large page to populate the feeds.
@@ -48,15 +97,8 @@ export async function getNews(
 		url += `&category=${encodeURIComponent(categorySlug)}`;
 	}
 
-	try {
-		const res = await f(url, { signal: AbortSignal.timeout(2000) });
-		if (res.ok) {
-			const result = await res.json();
-			articles = result && result.data ? result.data : [];
-		}
-	} catch (e) {
-		console.warn('Backend news API unreachable.', e);
-	}
+	const result = await fetchJsonCached<{ data: News[] }>(url, f, AbortSignal.timeout(2000));
+	const articles = result?.data ?? [];
 
 	// Filter by published status (backend search already filters by category/query).
 	return articles
