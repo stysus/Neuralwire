@@ -72,6 +72,10 @@ English by default).
   (jpeg/png/webp/gif, ≤ 5 MiB), stores it under `UPLOAD_DIR` with a random
   name, and serves it at `/uploads/...`. In the Docker image `UPLOAD_DIR`
   points at the persistent volume so uploaded images survive redeploys
+- **Database backups**: automatic gzip snapshot at startup then every
+  `BACKUP_INTERVAL_HOURS` (default 24h), kept under `BACKUP_DIR` with
+  `BACKUP_RETENTION` (default 7). Admin can also download a backup on demand
+  via `GET /api/admin/backup`
 
 ## Requirements
 

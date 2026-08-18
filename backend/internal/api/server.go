@@ -73,6 +73,10 @@ type Server struct {
 	// scheduler controls the auto fetch/publish loop (STY-57/61). Nil
 	// disables the start/stop API.
 	scheduler *scheduler.Scheduler
+	// backupDir is where admin-created database backups are stored.
+	backupDir string
+	// backupRetain is how many backups to keep (0 = no pruning).
+	backupRetain int
 }
 
 // ServerOptions configures the API server.
@@ -123,6 +127,11 @@ type ServerOptions struct {
 	// Scheduler is the auto fetch/publish controller. When non-nil, the
 	// /api/admin/autopublish/start and /stop endpoints toggle it.
 	Scheduler *scheduler.Scheduler
+	// BackupDir is where database backups are stored. Empty disables the
+	// backup endpoint.
+	BackupDir string
+	// BackupRetain keeps the newest N backups and prunes the rest.
+	BackupRetain int
 }
 
 // NewServer builds a Server.
@@ -162,6 +171,8 @@ func NewServer(opts ServerOptions) *Server {
 		staticDir:          opts.StaticDir,
 		uploadDir:          opts.UploadDir,
 		scheduler:          opts.Scheduler,
+		backupDir:          opts.BackupDir,
+		backupRetain:       opts.BackupRetain,
 	}
 	if opts.ViewRateLimit > 0 {
 		srv.viewLimiter = ratelimit.New(opts.ViewRateLimit, opts.ViewRateWindow)
@@ -227,6 +238,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/admin/autopublish/start", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleStartAutoPublish))))
 	mux.Handle("POST /api/admin/autopublish/stop", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleStopAutoPublish))))
 	mux.Handle("POST /api/admin/upload-image", s.requireAuth(s.csrfProtect(http.HandlerFunc(s.handleUploadImage))))
+	mux.Handle("GET /api/admin/backup", s.requireAuth(http.HandlerFunc(s.handleBackup)))
 	mux.Handle("/api/admin/", s.requireAuth(s.csrfProtect(admin)))
 
 	// Serve admin-uploaded images under /uploads/ when an upload directory

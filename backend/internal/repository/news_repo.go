@@ -29,6 +29,11 @@ func (r *NewsRepository) Ping(ctx context.Context) error {
 	return r.db.PingContext(ctx)
 }
 
+// DB exposes the underlying *sql.DB, used by the backup service.
+func (r *NewsRepository) DB() *sql.DB {
+	return r.db
+}
+
 const newsColumns = `id, title, slug, url, source, category, summary,
 	content, image_url, status, published_at, created_at,
 	value_score, value_breakdown, value_confidence, value_recommendation,
