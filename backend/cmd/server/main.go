@@ -17,6 +17,7 @@ import (
 	"neuralwire/backend/internal/ai"
 	"neuralwire/backend/internal/api"
 	"neuralwire/backend/internal/auth"
+	"neuralwire/backend/internal/backup"
 	"neuralwire/backend/internal/config"
 	"neuralwire/backend/internal/database"
 	"neuralwire/backend/internal/fetcher"
@@ -192,7 +193,35 @@ func main() {
 		StaticDir:          cfg.StaticDir,
 		UploadDir:          cfg.UploadDir,
 		Scheduler:          sched,
+		BackupDir:          cfg.BackupDir,
+		BackupRetain:       cfg.BackupRetention,
 	})
+
+	// Automatic database backup (STY-94): run on a timer, prune old backups.
+	if cfg.BackupDir != "" && cfg.BackupIntervalHours > 0 {
+		runBackup := func() {
+			path, err := backup.Create(newsRepo.DB(), cfg.BackupDir)
+			if err != nil {
+				slogLogger.Error("backup: automatic backup failed", "error", err)
+				return
+			}
+			slogLogger.Info("backup: automatic backup created", "path", path)
+			if cfg.BackupRetention > 0 {
+				if err := backup.Prune(cfg.BackupDir, cfg.BackupRetention); err != nil {
+					slogLogger.Warn("backup: prune failed", "error", err)
+				}
+			}
+		}
+		runBackup() // backup on startup, then on interval
+		interval := time.Duration(cfg.BackupIntervalHours) * time.Hour
+		go func() {
+			t := time.NewTicker(interval)
+			defer t.Stop()
+			for range t.C {
+				runBackup()
+			}
+		}()
+	}
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

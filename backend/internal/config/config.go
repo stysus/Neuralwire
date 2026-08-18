@@ -95,6 +95,12 @@ type Config struct {
 	// must be writable by the server process; in production it should point
 	// at a persistent volume. Files are served under /uploads/.
 	UploadDir string
+	// BackupDir is where database backups are stored. Empty disables backups.
+	BackupDir string
+	// BackupRetention keeps the newest N backups and prunes older ones.
+	BackupRetention int
+	// BackupIntervalHours is how often the automatic backup runs (0 disables).
+	BackupIntervalHours int
 }
 
 // Load builds a Config from the environment, applying defaults. It first
@@ -185,6 +191,9 @@ func Load() (Config, error) {
 		LogFormat:                strings.ToLower(strings.TrimSpace(getenv("LOG_FORMAT", "text"))),
 		StaticDir:                strings.TrimSpace(getenv("STATIC_DIR", "../frontend/build")),
 		UploadDir:                strings.TrimSpace(getenv("UPLOAD_DIR", "./data/uploads")),
+		BackupDir:                strings.TrimSpace(getenv("BACKUP_DIR", "./data/backups")),
+		BackupRetention:          getenvIntOr("BACKUP_RETENTION", 7),
+		BackupIntervalHours:      getenvIntOr("BACKUP_INTERVAL_HOURS", 24),
 	}, nil
 }
 
@@ -258,6 +267,16 @@ func getenvInt(key string, fallback int) (int, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// getenvIntOr parses an integer environment variable, silently falling back
+// to the default when unset or invalid (used for optional settings).
+func getenvIntOr(key string, fallback int) int {
+	n, err := getenvInt(key, fallback)
+	if err != nil {
+		return fallback
+	}
+	return n
 }
 
 // getenvList parses a comma-separated environment variable into a slice,

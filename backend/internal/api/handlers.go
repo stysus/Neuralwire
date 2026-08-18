@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"neuralwire/backend/internal/backup"
 	"neuralwire/backend/internal/models"
 	"neuralwire/backend/internal/repository"
 )
@@ -151,6 +152,34 @@ var allowedImageTypes = map[string]string{
 	"image/png":  ".png",
 	"image/webp": ".webp",
 	"image/gif":  ".gif",
+}
+
+// handleBackup creates a gzip-compressed SQLite backup and streams it to the
+// client for download, then prunes old backups. Admin-only.
+func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
+	if s.backupDir == "" {
+		s.writeError(w, http.StatusServiceUnavailable, "backups are not configured")
+		return
+	}
+
+	path, err := backup.Create(s.newsRepo.DB(), s.backupDir)
+	if err != nil {
+		s.slog.Error("api: backup failed", "error", err)
+		s.writeError(w, http.StatusInternalServerError, "failed to create backup")
+		return
+	}
+	defer os.Remove(path)
+
+	if s.backupRetain > 0 {
+		if err := backup.Prune(s.backupDir, s.backupRetain); err != nil {
+			s.slog.Warn("api: prune backups", "error", err)
+		}
+	}
+
+	name := filepath.Base(path)
+	w.Header().Set("Content-Type", "application/gzip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+name+`"`)
+	http.ServeFile(w, r, path)
 }
 
 // handleUploadImage stores an admin-uploaded image and returns its public
