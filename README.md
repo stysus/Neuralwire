@@ -1,5 +1,7 @@
 # Neuralwire — AI News & Editorial Platform
 
+<img width="1632" height="1343" alt="Screenshot_20260820_022548" src="https://github.com/user-attachments/assets/124469d1-a851-41d6-b86c-57424047a3b7" />
+
 > An editorial news portal for artificial intelligence, neural networks, and the future of computation. Bridging the gap between silicon and humanity.
 
 **Live site:** [https://neuralwire.info](https://neuralwire.info)
